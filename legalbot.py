@@ -2,7 +2,7 @@ import asyncio import logging import sqlite3 import threading from datetime impo
 
 from aiogram import Bot, Dispatcher, types from aiogram.filters import CommandStart from aiogram.fsm.context import FSMContext from aiogram.fsm.state import StatesGroup, State from aiogram.fsm.storage.memory import MemoryStorage from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-from fastapi import FastAPI, Request, HTTPException, status from fastapi.responses import HTMLResponse from pydantic import BaseModel import uvicorn
+from fastapi import FastAPI, Request, HTTPException, status from fastapi.responses import HTMLResponse from pydantic import BaseModel import uvicorn import json
 
 API_TOKEN = os.getenv("API_TOKEN") ADMIN_CHAT_ID_ENV = os.getenv("ADMIN_CHAT_ID") if not ADMIN_CHAT_ID_ENV: raise ValueError("ADMIN_CHAT_ID is not set") ADMIN_CHAT_ID = int(ADMIN_CHAT_ID_ENV) ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "secure-token-123")
 
@@ -46,53 +46,9 @@ def authorize(request: Request): token = request.headers.get("Authorization") if
 
 @app.post("/api/status") async def update_status(req: StatusRequest, request: Request): authorize(request) with conn: conn.execute("UPDATE requests SET status = ? WHERE user_id = ?", (req.status, req.user_id)) return {"status": "updated"}
 
-@app.get("/admin", response_class=HTMLResponse) async def admin_html(request: Request): token = request.query_params.get("token") if token != ADMIN_TOKEN: return HTMLResponse(status_code=403, content="Access Denied") return f"""
+@app.get("/admin", response_class=HTMLResponse) async def admin_html(request: Request): token = request.query_params.get("token") if token != ADMIN_TOKEN: return HTMLResponse(status_code=403, content="Access Denied") safe_token = json.dumps(token) return f""" <html><body> <h2>LegalBot Admin</h2> <script> const token = {safe_token}; async function sendReply(userId) {{ const msg = prompt("Ответ пользователю:"); if (msg) {{ await fetch('/api/reply', {{ method: 'POST', headers: {{'Content-Type': 'application/json', Authorization: 'Bearer ' + token}}, body: JSON.stringify({{user_id: userId, message: msg}}) }}); alert("Ответ отправлен!"); location.reload(); }} }} async function setStatus(userId) {{ const status = prompt("Новый статус (new/in_work/done):"); if (status) {{ await fetch('/api/status', {{ method: 'POST', headers: {{'Content-Type': 'application/json', Authorization: 'Bearer ' + token}}, body: JSON.stringify({{user_id: userId, status: status}}) }}); alert("Статус обновлён!"); location.reload(); }} }} async function load() {{ const res = await fetch('/api/requests', {{headers: {{Authorization: 'Bearer ' + token}}}}); const data = await res.json(); document.body.innerHTML += '<ul>' + data.map(r => <li> <b>${{r.name}}</b> [${{r.phone}}] — <i>${{r.status}}</i><br> ${{r.message}}<br> <button onclick="sendReply(${{r.user_id}})">Ответить</button> <button onclick="setStatus(${{r.user_id}})">Изменить статус</button> </li>).join('') + '</ul>'; }} load(); </script> </body></html> """
 
-<html><body>
-<h2>LegalBot Admin</h2>
-<script>
-const token = '{ADMIN_TOKEN}';
-async function sendReply(userId) {{
-    const msg = prompt("Ответ пользователю:");
-    if (msg) {{
-        await fetch('/api/reply', {{
-            method: 'POST',
-            headers: {{'Content-Type': 'application/json', Authorization: 'Bearer ' + token}},
-            body: JSON.stringify({{user_id: userId, message: msg}})
-        }});
-        alert("Ответ отправлен!");
-        location.reload();
-    }}
-}}
-async function setStatus(userId) {{
-    const status = prompt("Новый статус (new/in_work/done):");
-    if (status) {{
-        await fetch('/api/status', {{
-            method: 'POST',
-            headers: {{'Content-Type': 'application/json', Authorization: 'Bearer ' + token}},
-            body: JSON.stringify({{user_id: userId, status: status}})
-        }});
-        alert("Статус обновлён!");
-        location.reload();
-    }}
-}}
-async function load() {{
-    const res = await fetch('/api/requests', {{headers: {{Authorization: 'Bearer ' + token}}}});
-    const data = await res.json();
-    const list = document.createElement('ul');
-    data.forEach(r => {{
-        const li = document.createElement('li');
-        li.innerHTML = `<b>${{r.name}}</b> [${{r.phone}}] — <i>${{r.status}}</i><br>${{r.message}}<br>` +
-                       `<button onclick="sendReply(${{r.user_id}})">Ответить</button> ` +
-                       `<button onclick="setStatus(${{r.user_id}})">Изменить статус</button>`;
-        list.appendChild(li);
-    }});
-    document.body.appendChild(list);
-}}
-load();
-</script>
-</body></html>
-"""@dp.message(lambda m: m.text == "Часто задаваемые вопросы") async def show_faq(message: types.Message): await message.answer("Часто задаваемые вопросы пока не добавлены.")
+@dp.message(lambda m: m.text == "Часто задаваемые вопросы") async def show_faq(message: types.Message): await message.answer("Часто задаваемые вопросы пока не добавлены.")
 
 @dp.message(lambda m: m.text == "Отправить документ") async def ask_document(message: types.Message): await message.answer("Пожалуйста, отправьте документ (PDF, DOCX и т.д.)")
 
