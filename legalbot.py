@@ -1,3 +1,4 @@
+```python name=legalbot.py
 import asyncio 
 import logging 
 import sqlite3 
@@ -148,39 +149,235 @@ async def update_status(req: StatusRequest, request: Request):
 
 @app.get("/admin", response_class=HTMLResponse) 
 async def admin_html(request: Request): 
-    return """ <html> <head> <style> body { font-family: Arial, sans-serif; padding: 20px; } h2 { color: #333; } li { margin-bottom: 15px; } button { margin: 2px; } </style> </head> <body> <h2>LegalBot Admin</h2> <script> const token = prompt("Введите токен для доступа:"); async function sendReply(userId) { const msg = prompt("Ответ пользователю:"); if (msg) { await fetch('/api/reply', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ user_id: userId, message: msg }) }); alert("Ответ отправлен!"); location.reload(); } }
+    return """
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>LegalBot Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Tabler Core CSS -->
+    <link href="https://unpkg.com/@tabler/core@latest/dist/css/tabler.min.css" rel="stylesheet"/>
+    <style>
+        body { background: #f4f6fa; }
+        .table-responsive { margin-top: 28px; }
+        .actions .btn { margin-right: 8px; }
+        .filter-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+        .filter-row input, .filter-row select { min-width: 160px; }
+    </style>
+</head>
+<body>
+<div class="page">
+    <div class="container-xl">
+        <div class="page-header d-print-none mt-4 mb-2">
+            <h2 class="page-title">Заявки LegalBot</h2>
+        </div>
+        <div class="filter-row">
+            <input type="search" class="form-control" id="searchInput" placeholder="Поиск по имени или сообщению">
+            <select class="form-select" id="statusFilter">
+                <option value="">Все статусы</option>
+                <option value="new">Новая</option>
+                <option value="in_work">В работе</option>
+                <option value="done">Готово</option>
+            </select>
+        </div>
+        <div id="loader" class="text-center py-5">Загрузка заявок...</div>
+        <div class="table-responsive" id="tableDiv" style="display:none;">
+            <table class="table table-vcenter table-striped" id="reqTable">
+                <thead>
+                    <tr>
+                        <th data-sort="name">Имя &#x25B2;&#x25BC;</th>
+                        <th data-sort="phone">Телефон</th>
+                        <th data-sort="created_at">Время &#x25B2;&#x25BC;</th>
+                        <th data-sort="message">Сообщение</th>
+                        <th data-sort="status">Статус</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="reqTbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
-async function setStatus(userId) {
-    const status = prompt("Новый статус (new/in_work/done):");
-    if (status) {
-        await fetch('/api/status', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: 'Bearer ' + token
-            },
-            body: JSON.stringify({ user_id: userId, status: status })
-        });
-        alert("Статус обновлён!");
-        location.reload();
+<!-- Модалка для ответа -->
+<div class="modal modal-blur fade" id="replyModal" tabindex="-1" style="display:none;" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Ответ пользователю</h5></div>
+      <div class="modal-body">
+        <textarea id="replyMsg" class="form-control" rows="4" placeholder="Введите ответ"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-link" onclick="closeReplyModal()">Отмена</button>
+        <button type="button" class="btn btn-primary" id="replySendBtn">Отправить</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Модалка для смены статуса -->
+<div class="modal modal-blur fade" id="statusModal" tabindex="-1" style="display:none;" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Сменить статус</h5></div>
+      <div class="modal-body">
+        <select id="newStatus" class="form-select">
+            <option value="new">Новая</option>
+            <option value="in_work">В работе</option>
+            <option value="done">Готово</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-link" onclick="closeStatusModal()">Отмена</button>
+        <button type="button" class="btn btn-primary" id="statusSendBtn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabler JS -->
+<script src="https://unpkg.com/@tabler/core@latest/dist/js/tabler.min.js"></script>
+<script>
+let token = sessionStorage.getItem("adminToken");
+if (!token) {
+    token = prompt("Введите токен для доступа:");
+    sessionStorage.setItem("adminToken", token);
+}
+
+let allData = [];
+let sortField = "created_at", sortAsc = false;
+let filterStatus = "", searchValue = "";
+let replyUserId = null, statusUserId = null;
+
+function statusBadge(status) {
+    if (status === "done")   return '<span class="badge bg-success">Готово</span>';
+    if (status === "in_work")return '<span class="badge bg-warning text-dark">В работе</span>';
+    return '<span class="badge bg-purple">Новая</span>';
+}
+
+function renderTable() {
+    let data = [...allData];
+    // Фильтры
+    if (filterStatus) data = data.filter(r => r.status === filterStatus);
+    if (searchValue) {
+        const v = searchValue.toLowerCase();
+        data = data.filter(r => (r.name && r.name.toLowerCase().includes(v))
+                             || (r.message && r.message.toLowerCase().includes(v)));
     }
+    // Сортировка
+    data.sort((a, b) => {
+        let va = a[sortField], vb = b[sortField];
+        if (sortField === "created_at") { va = va || ""; vb = vb || ""; }
+        if (va === undefined) return 1;
+        if (vb === undefined) return -1;
+        if (va < vb) return sortAsc ? -1 : 1;
+        if (va > vb) return sortAsc ? 1 : -1;
+        return 0;
+    });
+    // Рендер
+    const tbody = document.getElementById('reqTbody');
+    tbody.innerHTML = "";
+    data.forEach(r => {
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><b>${r.name || ""}</b></td>
+            <td>${r.phone || ""}</td>
+            <td><small>${(r.created_at || '').replace('T','<br>')}</small></td>
+            <td style="max-width:220px; word-break:break-word;">${r.message || ""}</td>
+            <td>${statusBadge(r.status)}</td>
+            <td class="actions">
+                <button type="button" class="btn btn-sm btn-primary" onclick="openReplyModal(${r.user_id})">Ответить</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openStatusModal(${r.user_id},'${r.status}')">Статус</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
 
 async function load() {
+    document.getElementById('loader').style.display = "";
+    document.getElementById('tableDiv').style.display = "none";
     const res = await fetch('/api/requests', {
         headers: { Authorization: 'Bearer ' + token }
     });
-    const data = await res.json();
-    const html = '<ul>' + data.map(r => `
-        <li>
-            <b>${r.name}</b> [${r.phone}] — <i>${r.status}</i><br>
-            ${r.message}<br>
-            <button onclick="sendReply(${r.user_id})">Ответить</button>
-            <button onclick="setStatus(${r.user_id})">Изменить статус</button>
-        </li>
-    `).join('') + '</ul>';
-    document.body.innerHTML += html;
+    allData = await res.json();
+    document.getElementById('loader').style.display = "none";
+    document.getElementById('tableDiv').style.display = "";
+    renderTable();
 }
+// Фильтрация
+document.getElementById("statusFilter").onchange = function(e) {
+    filterStatus = e.target.value;
+    renderTable();
+};
+document.getElementById("searchInput").oninput = function(e) {
+    searchValue = e.target.value;
+    renderTable();
+};
+// Сортировка
+document.querySelectorAll("#reqTable th[data-sort]").forEach(th => {
+    th.style.cursor = "pointer";
+    th.onclick = () => {
+        const field = th.getAttribute("data-sort");
+        if (sortField === field) sortAsc = !sortAsc;
+        else { sortField = field; sortAsc = true; }
+        renderTable();
+    };
+});
+
+// --- Модалки ответа ---
+function openReplyModal(userId) {
+    replyUserId = userId;
+    document.getElementById("replyMsg").value = "";
+    document.getElementById("replyModal").style.display = "block";
+    document.getElementById("replyMsg").focus();
+}
+function closeReplyModal() {
+    document.getElementById("replyModal").style.display = "none";
+}
+document.getElementById("replySendBtn").onclick = async function() {
+    const msg = document.getElementById("replyMsg").value;
+    if (msg && replyUserId) {
+        await fetch('/api/reply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({ user_id: replyUserId, message: msg })
+        });
+        closeReplyModal();
+        alert("Ответ отправлен!");
+        load();
+    }
+};
+// --- Модалки статуса ---
+function openStatusModal(userId, currentStatus) {
+    statusUserId = userId;
+    document.getElementById("newStatus").value = currentStatus || "new";
+    document.getElementById("statusModal").style.display = "block";
+}
+function closeStatusModal() {
+    document.getElementById("statusModal").style.display = "none";
+}
+document.getElementById("statusSendBtn").onclick = async function() {
+    const status = document.getElementById("newStatus").value;
+    if (status && statusUserId) {
+        await fetch('/api/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({ user_id: statusUserId, status: status })
+        });
+        closeStatusModal();
+        alert("Статус обновлён!");
+        load();
+    }
+};
+
+// --- Закрытие модалки при клике вне ---
+window.onclick = function(event) {
+    if (event.target.classList.contains("modal")) {
+        closeReplyModal();
+        closeStatusModal();
+    }
+};
 
 load();
 </script>
@@ -210,4 +407,5 @@ async def main():
     await asyncio.gather(api_task, bot_task)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main())        
+```
