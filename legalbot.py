@@ -58,6 +58,11 @@ c.execute("""
         file_name TEXT,
         sent_at TEXT
     )""")
+c.execute("""
+    CREATE TABLE IF NOT EXISTS user_languages (
+        user_id INTEGER PRIMARY KEY,
+        language TEXT DEFAULT 'ru'
+    )""")
 conn.commit()
 
 # --- Мультиязычность ---
@@ -100,8 +105,8 @@ translations = {
         'status_done': "Готово",
         'loader': "Загрузка заявок...",
         'choose_language': "Выберите язык / Choose language",
-        'lang_ru': "Русский",
-        'lang_en': "English"
+        'lang_ru': "🇷🇺 Русский",
+        'lang_en': "🇺🇸 English"
     },
     'en': {
         'welcome': "Welcome to LegalBot!",
@@ -141,8 +146,8 @@ translations = {
         'status_done': "Done",
         'loader': "Loading requests...",
         'choose_language': "Choose your language / Выберите язык",
-        'lang_ru': "Русский",
-        'lang_en': "English"
+        'lang_ru': "🇷🇺 Русский",
+        'lang_en': "🇺🇸 English"
     }
 }
 
@@ -153,6 +158,21 @@ class RequestForm(StatesGroup):
     attach_doc_choice = State()
     attach_docs = State()
     language = State()
+
+def save_user_language(user_id: int, lang: str):
+    """Сохраняем язык пользователя в базу данных"""
+    with conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO user_languages (user_id, language) VALUES (?, ?)",
+            (user_id, lang)
+        )
+
+def get_user_language(user_id: int) -> str:
+    """Получаем язык пользователя из базы данных"""
+    row = conn.execute(
+        "SELECT language FROM user_languages WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    return row[0] if row else 'ru'
 
 def get_menu_kb(user_id: int, lang: str = 'ru'):
     t = translations[lang]
@@ -178,38 +198,57 @@ def get_back_kb(lang='ru'):
 def get_lang_kb():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=translations['ru']['lang_ru']), KeyboardButton(text=translations['en']['lang_en'])]
+            [KeyboardButton(text=translations['ru']['lang_ru'])],
+            [KeyboardButton(text=translations['en']['lang_en'])]
         ],
         resize_keyboard=True
     )
 
-async def get_lang(state: FSMContext):
+async def get_lang(state: FSMContext, user_id: int = None):
+    """Получаем язык из состояния или из базы данных"""
     data = await state.get_data()
-    return data.get('lang', 'ru')
+    lang = data.get('lang')
+    if not lang and user_id:
+        lang = get_user_language(user_id)
+    return lang or 'ru'
 
 @dp.message(CommandStart()) 
 async def start(message: types.Message, state: FSMContext): 
-    data = await state.get_data() 
-    if not data.get('lang'): 
-        await state.set_state(RequestForm.language) 
-        await message.answer(translations['ru']['choose_language'], reply_markup=get_lang_kb()) 
-        return
-
-    lang = data['lang']
+    user_id = message.from_user.id
+    
+    # Проверяем, есть ли сохраненный язык
+    saved_lang = get_user_language(user_id)
+    
+    # Если язык не сохранен, предлагаем выбрать
+    if not saved_lang or saved_lang == 'ru':  # Проверяем, если это первый запуск
+        data = await state.get_data()
+        if not data.get('lang'):
+            await state.set_state(RequestForm.language)
+            await message.answer(
+                translations['ru']['choose_language'], 
+                reply_markup=get_lang_kb()
+            )
+            return
+    
+    # Используем сохраненный язык
+    lang = saved_lang
+    await state.update_data(lang=lang)
+    
     await bot.send_photo(
         chat_id=message.chat.id,
         photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
         caption=translations[lang]['welcome'],
-        reply_markup=get_menu_kb(message.from_user.id, lang)
+        reply_markup=get_menu_kb(user_id, lang)
     )
 
 @dp.message(RequestForm.language) 
 async def choose_lang(message: types.Message, state: FSMContext): 
     logging.info(f"LANG SELECTED: {message.text}") 
-    text = message.text.strip().lower() 
-    if text == translations['ru']['lang_ru'].lower(): 
+    text = message.text.strip()
+    
+    if text == translations['ru']['lang_ru']: 
         lang = 'ru' 
-    elif text == translations['en']['lang_en'].lower(): 
+    elif text == translations['en']['lang_en']: 
         lang = 'en' 
     else: 
         await message.answer( 
@@ -218,30 +257,44 @@ async def choose_lang(message: types.Message, state: FSMContext):
         ) 
         return
 
+    # Сохраняем язык в базу данных
+    user_id = message.from_user.id
+    save_user_language(user_id, lang)
+    
+    # Обновляем состояние
     await state.update_data(lang=lang)
-    await start(message, state)
+    
+    # Показываем главное меню
+    await bot.send_photo(
+        chat_id=message.chat.id,
+        photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
+        caption=translations[lang]['welcome'],
+        reply_markup=get_menu_kb(user_id, lang)
+    )
+    
+    # Сбрасываем состояние языка
     await state.clear()
 
-@dp.message(lambda m: m.text == translations['ru']['contacts_button'] or m.text == translations['en']['contacts_button'])
+@dp.message(lambda m: m.text in [translations['ru']['contacts_button'], translations['en']['contacts_button']])
 async def contacts(message: types.Message, state: FSMContext):
-    lang = await get_lang(state)
+    lang = await get_lang(state, message.from_user.id)
     await message.answer(translations[lang]['contacts'], reply_markup=get_menu_kb(message.from_user.id, lang))
 
-@dp.message(lambda m: m.text == translations['ru']['consult_button'] or m.text == translations['en']['consult_button'])
+@dp.message(lambda m: m.text in [translations['ru']['consult_button'], translations['en']['consult_button']])
 async def consultation(message: types.Message, state: FSMContext):
-    lang = await get_lang(state)
+    lang = await get_lang(state, message.from_user.id)
     await state.set_state(RequestForm.name)
     await state.update_data(user_id=message.from_user.id, lang=lang)
     await message.answer(translations[lang]['enter_name'], reply_markup=get_back_kb(lang))
 
 @dp.message(RequestForm.name)
 async def get_name(message: types.Message, state: FSMContext):
-    lang = await get_lang(state)
-    if message.text == translations[lang]['back']:
+    lang = await get_lang(state, message.from_user.id)
+    if message.text in [translations['ru']['back'], translations['en']['back']]:
         await state.clear()
         await start(message, state)
         return
-    if message.text == translations[lang]['main_menu_btn']:
+    if message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
         await state.clear()
         await start(message, state)
         return
@@ -251,12 +304,12 @@ async def get_name(message: types.Message, state: FSMContext):
 
 @dp.message(RequestForm.phone)
 async def get_phone(message: types.Message, state: FSMContext):
-    lang = await get_lang(state)
-    if message.text == translations[lang]['back']:
+    lang = await get_lang(state, message.from_user.id)
+    if message.text in [translations['ru']['back'], translations['en']['back']]:
         await state.set_state(RequestForm.name)
         await message.answer(translations[lang]['enter_name'], reply_markup=get_back_kb(lang))
         return
-    if message.text == translations[lang]['main_menu_btn']:
+    if message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
         await state.clear()
         await start(message, state)
         return
@@ -270,12 +323,12 @@ async def get_phone(message: types.Message, state: FSMContext):
 
 @dp.message(RequestForm.message)
 async def after_problem(message: types.Message, state: FSMContext):
-    lang = await get_lang(state)
-    if message.text == translations[lang]['back']:
+    lang = await get_lang(state, message.from_user.id)
+    if message.text in [translations['ru']['back'], translations['en']['back']]:
         await state.set_state(RequestForm.phone)
         await message.answer(translations[lang]['enter_phone'], reply_markup=get_back_kb(lang))
         return
-    if message.text == translations[lang]['main_menu_btn']:
+    if message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
         await state.clear()
         await start(message, state)
         return
@@ -293,8 +346,8 @@ async def after_problem(message: types.Message, state: FSMContext):
 
 @dp.message(RequestForm.attach_doc_choice)
 async def attach_doc_choice(message: types.Message, state: FSMContext):
-    lang = await get_lang(state)
-    if message.text == translations[lang]['attach_yes']:
+    lang = await get_lang(state, message.from_user.id)
+    if message.text in [translations['ru']['attach_yes'], translations['en']['attach_yes']]:
         await state.set_state(RequestForm.attach_docs)
         await state.update_data(documents=[])
         await message.answer(
@@ -307,9 +360,9 @@ async def attach_doc_choice(message: types.Message, state: FSMContext):
                 resize_keyboard=True
             )
         )
-    elif message.text == translations[lang]['attach_no']:
+    elif message.text in [translations['ru']['attach_no'], translations['en']['attach_no']]:
         await finish_request(message, state)
-    elif message.text == translations[lang]['main_menu_btn']:
+    elif message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
         await state.clear()
         await start(message, state)
     else:
@@ -317,7 +370,7 @@ async def attach_doc_choice(message: types.Message, state: FSMContext):
 
 @dp.message(RequestForm.attach_docs, lambda m: m.document)
 async def handle_docs(message: types.Message, state: FSMContext):
-    lang = await get_lang(state)
+    lang = await get_lang(state, message.from_user.id)
     data = await state.get_data()
     docs = data.get('documents', [])
     if len(docs) >= 3:
@@ -333,15 +386,15 @@ async def done_docs(message: types.Message, state: FSMContext):
 
 @dp.message(RequestForm.attach_docs)
 async def attach_docs_menu(message: types.Message, state: FSMContext):
-    lang = await get_lang(state)
-    if message.text == translations[lang]['main_menu_btn']:
+    lang = await get_lang(state, message.from_user.id)
+    if message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
         await state.clear()
         await start(message, state)
         return
 
 async def finish_request(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    lang = data.get('lang', 'ru')
+    lang = data.get('lang') or get_user_language(message.from_user.id)
     from datetime import datetime
     now = datetime.now().isoformat()
     user_id = message.from_user.id
@@ -364,9 +417,9 @@ async def finish_request(message: types.Message, state: FSMContext):
     await message.answer(translations[lang]['thanks'], reply_markup=get_menu_kb(user_id, lang))
     await state.clear()
 
-@dp.message(lambda m: m.text == translations['ru']['admin_panel_button'] or m.text == translations['en']['admin_panel_button'])
+@dp.message(lambda m: m.text in [translations['ru']['admin_panel_button'], translations['en']['admin_panel_button']])
 async def admin_panel(message: types.Message, state: FSMContext):
-    lang = await get_lang(state)
+    lang = await get_lang(state, message.from_user.id)
     if message.from_user.id not in ADMINS:
         await message.answer(translations[lang]['forbidden'])
         return
@@ -376,9 +429,9 @@ async def admin_panel(message: types.Message, state: FSMContext):
     ])
     await message.answer("Откройте админ-панель:", reply_markup=kb)
 
-@dp.message(lambda m: m.text == translations['ru']['faq_button'] or m.text == translations['en']['faq_button'])
+@dp.message(lambda m: m.text in [translations['ru']['faq_button'], translations['en']['faq_button']])
 async def show_faq(message: types.Message, state: FSMContext):
-    lang = await get_lang(state)
+    lang = await get_lang(state, message.from_user.id)
     await message.answer(translations[lang]['faq_not_added'], reply_markup=get_menu_kb(message.from_user.id, lang))
 
 # --- FastAPI part ---
