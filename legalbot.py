@@ -243,6 +243,7 @@ async def get_requests(request: Request):
 async def download_document(file_id: str, request: Request):
     token = request.headers.get("X-Admin-Token") or request.query_params.get("token")
     authorize(request, token)
+    # Имя файла из базы (если нет — используем file_id)
     row = conn.execute("SELECT file_name FROM documents WHERE file_id = ?", (file_id,)).fetchone()
     file_name = row[0] if row else file_id
     url = f"https://api.telegram.org/bot{API_TOKEN}/getFile?file_id={file_id}"
@@ -254,14 +255,22 @@ async def download_document(file_id: str, request: Request):
     file_url = f"https://api.telegram.org/file/bot{API_TOKEN}/{file_path}"
     file_resp = requests.get(file_url, stream=True)
     import urllib.parse
+    # --- Добавляем определение Content-Type ---
+    import mimetypes
+    mime_type, _ = mimetypes.guess_type(file_name)
+    if not mime_type:
+        mime_type = "application/octet-stream"
     try:
         file_name.encode('latin-1')
         content_disposition = f'attachment; filename="{file_name}"'
     except UnicodeEncodeError:
         quoted_name = urllib.parse.quote(file_name)
         content_disposition = f"attachment; filename*=UTF-8''{quoted_name}"
-    headers = {"Content-Disposition": content_disposition}
-    return StreamingResponse(file_resp.raw, headers=headers, media_type=file_resp.headers.get('Content-Type', 'application/octet-stream'))
+    headers = {
+        "Content-Disposition": content_disposition
+    }
+    # --- Передаем content_type в StreamingResponse ---
+    return StreamingResponse(file_resp.raw, headers=headers, media_type=mime_type)
 
 @app.post("/api/reply")
 async def reply_user(req: ReplyRequest, request: Request):
