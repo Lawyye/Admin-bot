@@ -263,60 +263,36 @@ async def api_login(form: dict):
 async def root():
     return {"status": "ok"}
 
-@app.get("/api/requests")
-async def get_requests(request: Request):
+# Объединенный эндпоинт для заявок и документов
+@app.get("/api/all_records")
+async def get_all_records(request: Request):
     token = request.headers.get("X-Admin-Token")
     authorize(request, token)
-    rows = conn.execute(
-        "SELECT id, user_id, name, phone, message, created_at, status FROM requests ORDER BY created_at DESC"
-    ).fetchall()
-    return [
-        {
-            "id": r[0],
-            "user_id": r[1],
-            "name": r[2],
-            "phone": r[3],
-            "message": r[4],
-            "created_at": r[5],
-            "status": r[6]
-        }
-        for r in rows
-    ]
-
-@app.get("/api/documents")
-async def get_documents(request: Request):
-    token = request.headers.get("X-Admin-Token")
-    authorize(request, token)
-    rows = conn.execute(
-        "SELECT id, user_id, file_id, file_name, sent_at FROM documents ORDER BY sent_at DESC"
-    ).fetchall()
-    return [
-        {
-            "id": r[0],
-            "user_id": r[1],
-            "file_id": r[2],
-            "file_name": r[3],
-            "sent_at": r[4]
-        }
-        for r in rows
-    ]
+    reqs = conn.execute("""
+        SELECT id, user_id, name, phone, message, created_at, status, NULL as file_id, NULL as file_name
+        FROM requests
+    """).fetchall()
+    docs = conn.execute("""
+        SELECT id+1000000 as id, user_id, NULL as name, NULL as phone, NULL as message, sent_at as created_at, NULL as status, file_id, file_name
+        FROM documents
+    """).fetchall()
+    all_records = [dict(zip(
+        ["id", "user_id", "name", "phone", "message", "created_at", "status", "file_id", "file_name"], r
+    )) for r in list(reqs) + list(docs)]
+    all_records.sort(key=lambda r: r["created_at"], reverse=True)
+    return all_records
 
 @app.get("/api/download/{file_id}")
 async def download_document(file_id: str, request: Request):
-    # Accept token from header or from query param
     import requests
     token = request.headers.get("X-Admin-Token") or request.query_params.get("token")
     authorize(request, token)
-
-    # Получаем имя файла из базы
     row = conn.execute(
         "SELECT file_name FROM documents WHERE file_id = ?", (file_id,)
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Файл не найден в базе")
-
     file_name = row[0]
-
     url = f"https://api.telegram.org/bot{API_TOKEN}/getFile?file_id={file_id}"
     resp = requests.get(url)
     data = resp.json()
@@ -328,11 +304,8 @@ async def download_document(file_id: str, request: Request):
     file_resp = requests.get(file_url, stream=True)
     if not file_resp.ok:
         raise HTTPException(status_code=404, detail="Ошибка скачивания файла с Telegram серверов")
-
-    # Определяем Content-Type по расширению
     from mimetypes import guess_type
     content_type = guess_type(file_name)[0] or "application/octet-stream"
-
     headers = {
         "Content-Disposition": f'attachment; filename="{file_name}"'
     }
@@ -361,6 +334,7 @@ async def update_status(req: StatusRequest, request: Request):
         conn.execute("UPDATE requests SET status = ? WHERE user_id = ?", (req.status, req.user_id))
         return {"status": "updated"}
 
+# КРАСИВАЯ АДМИН-ПАНЕЛЬ
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_html(request: Request):
     return """
@@ -370,77 +344,109 @@ async def admin_html(request: Request):
     <meta charset="UTF-8">
     <title>LegalBot Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Tabler CSS и иконки -->
     <link href="https://unpkg.com/@tabler/core@latest/dist/css/tabler.min.css" rel="stylesheet"/>
+    <link href="https://unpkg.com/@tabler/icons@latest/iconfont/tabler-icons.min.css" rel="stylesheet"/>
     <style>
-        body { background: #f4f6fa; }
-        .table-responsive { margin-top: 28px; }
-        .actions .btn { margin-right: 8px; }
-        .filter-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
-        .filter-row input, .filter-row select { min-width: 160px; }
+        body { background: #f8fafc; }
+        .login-card {
+            max-width: 380px;
+            margin: 100px auto;
+            background: #fff;
+            border-radius: 22px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.14);
+            padding: 32px 32px 24px 32px;
+            transition: box-shadow .2s;
+        }
+        .login-card h3 { margin-bottom: 22px; }
+        .login-card input { margin-bottom: 14px; }
+        .logout-btn { float: right; margin-top: -8px; }
+        .page-title {
+            font-size: 2.2rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+            margin-bottom: 0.7em;
+        }
+        .filter-row {
+            margin-bottom: 18px;
+            gap: 18px;
+        }
+        .table-responsive { margin-top: 28px; border-radius: 18px; overflow: auto;}
+        .table { background: #fff; border-radius: 18px; }
+        .table th, .table td { vertical-align: middle !important;}
+        .table th { background: #f2f4f7; font-weight: 600;}
+        .table tbody tr:hover { background: #eaf0fa; transition: background .2s;}
+        .badge-status { font-size: .88em; padding: .3em 1em; border-radius: 12px;}
+        .status-new { background: #e3f6ff; color: #1779c4; }
+        .status-in_work { background: #ffeec7; color: #a67b00; }
+        .status-done { background: #caf6e3; color: #279152; }
+        .nowrap { white-space: nowrap; }
+        @media (max-width: 768px) {
+            .container-xl { padding: 0 2px; }
+            .page-title { font-size: 1.3rem;}
+            .login-card { margin: 38px auto; }
+        }
     </style>
 </head>
 <body>
-<div id="loginDiv" style="max-width:350px;margin:80px auto;display:none;">
-    <h3>Вход в админ-панель</h3>
-    <input id="loginInput" class="form-control mb-2" placeholder="Логин">
-    <input id="passwordInput" type="password" class="form-control mb-2" placeholder="Пароль">
-    <button id="loginBtn" class="btn btn-primary w-100">Войти</button>
-    <div id="loginError" style="color:red;margin-top:10px;display:none;">Неверный логин или пароль</div>
+<div id="loginDiv" class="login-card" style="display:none;">
+    <h3 class="text-center">Вход в админ-панель</h3>
+    <input id="loginInput" class="form-control" placeholder="Логин" autofocus>
+    <input id="passwordInput" type="password" class="form-control" placeholder="Пароль">
+    <button id="loginBtn" class="btn btn-primary w-100 mt-2" style="font-size:1.1em;">
+        <i class="ti ti-login-2"></i> Войти
+    </button>
+    <div id="loginError" style="color:#e53e3e;margin-top:14px;display:none;">Неверный логин или пароль</div>
 </div>
 <div id="adminDiv" style="display:none;">
     <div class="container-xl">
-        <div class="page-header d-print-none mt-4 mb-2">
-            <h2 class="page-title">Заявки LegalBot</h2>
-            <button id="logoutBtn" class="btn btn-outline-danger float-end">Выйти</button>
+        <div class="page-header d-print-none mt-4 mb-2 d-flex align-items-center justify-content-between">
+            <span class="page-title"><i class="ti ti-shield-lock"></i> Заявки и документы LegalBot</span>
+            <button id="logoutBtn" class="btn btn-outline-danger logout-btn">
+                <i class="ti ti-logout"></i> Выйти
+            </button>
         </div>
-        <div class="filter-row">
-            <input type="search" class="form-control" id="searchInput" placeholder="Поиск по имени или сообщению">
-            <select class="form-select" id="statusFilter">
+        <div class="filter-row d-flex align-items-center flex-wrap">
+            <input type="search" class="form-control" style="max-width:260px;" id="searchInput" placeholder="Поиск по имени, сообщению или файлу">
+            <select class="form-select" style="max-width:180px;" id="statusFilter">
                 <option value="">Все статусы</option>
                 <option value="new">Новая</option>
                 <option value="in_work">В работе</option>
                 <option value="done">Готово</option>
             </select>
         </div>
-        <div id="loader" class="text-center py-5">Загрузка заявок...</div>
-        <div class="table-responsive" id="tableDiv" style="display:none;">
-            <table class="table table-vcenter table-striped" id="reqTable">
+        <div id="loader" class="text-center py-5">
+            <div class="spinner-border text-primary" style="width:2.5rem;height:2.5rem;"></div>
+            <div style="margin-top:18px;color:#888;">Загрузка...</div>
+        </div>
+        <div class="table-responsive" id="allTableDiv" style="display:none;">
+            <table class="table table-vcenter table-striped">
                 <thead>
                     <tr>
-                        <th data-sort="name">Имя &#x25B2;&#x25BC;</th>
-                        <th data-sort="phone">Телефон</th>
-                        <th data-sort="created_at">Время &#x25B2;&#x25BC;</th>
-                        <th data-sort="message">Сообщение</th>
-                        <th data-sort="status">Статус</th>
-                        <th>Действия</th>
+                        <th>Пользователь</th>
+                        <th>Имя</th>
+                        <th>Телефон</th>
+                        <th>Сообщение / Документ</th>
+                        <th>Дата</th>
+                        <th>Статус</th>
+                        <th>Скачать</th>
                     </tr>
                 </thead>
-                <tbody id="reqTbody"></tbody>
+                <tbody id="allTbody"></tbody>
             </table>
         </div>
-        <div id="documentsDiv" class="mt-4">
-          <h3>Документы</h3>
-          <table class="table table-striped" id="docTable">
-              <thead>
-                  <tr>
-                      <th>Пользователь</th>
-                      <th>Имя файла</th>
-                      <th>Дата</th>
-                      <th>Скачать</th>
-                  </tr>
-              </thead>
-              <tbody id="docTbody"></tbody>
-          </table>
-      </div>
     </div>
 </div>
 <script>
 let adminToken = null;
 
+function show(el) { el.style.display = ''; }
+function hide(el) { el.style.display = 'none'; }
+
 async function checkAuth() {
     adminToken = null;
-    document.getElementById('loginDiv').style.display = '';
-    document.getElementById('adminDiv').style.display = 'none';
+    show(document.getElementById('loginDiv'));
+    hide(document.getElementById('adminDiv'));
 }
 document.getElementById('loginBtn').onclick = async function() {
     const login = document.getElementById('loginInput').value;
@@ -453,11 +459,10 @@ document.getElementById('loginBtn').onclick = async function() {
     if (res.status === 200) {
         let data = await res.json();
         adminToken = data.token;
-        document.getElementById('loginDiv').style.display = 'none';
-        document.getElementById('adminDiv').style.display = '';
+        hide(document.getElementById('loginDiv'));
+        show(document.getElementById('adminDiv'));
         document.getElementById('loginError').style.display = 'none';
-        load();
-        loadDocuments();
+        loadAll();
     } else {
         document.getElementById('loginError').style.display = '';
     }
@@ -465,8 +470,8 @@ document.getElementById('loginBtn').onclick = async function() {
 
 document.getElementById('logoutBtn').onclick = function() {
     adminToken = null;
-    document.getElementById('adminDiv').style.display = 'none';
-    document.getElementById('loginDiv').style.display = '';
+    hide(document.getElementById('adminDiv'));
+    show(document.getElementById('loginDiv'));
 };
 
 window.onload = checkAuth;
@@ -478,52 +483,84 @@ async function apiFetch(url, options = {}) {
     return fetch(url, options);
 }
 
-async function load() {
+function escapeHtml(text) {
+    if (!text) return "";
+    return text.replace(/[<>&"']/g, function(c) {
+        return {'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c];
+    });
+}
+
+// --- ФУНКЦИЯ ФОРМАТИРОВАНИЯ ДАТЫ ---
+function formatDate(dt) {
+    if (!dt) return "";
+    let d = new Date(dt);
+    if (isNaN(d)) {
+        let m = dt.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)/);
+        if (m) return m[1].split('-').reverse().join('.') + ' ' + m[2];
+        return dt.replace("T", " ").slice(0, 16);
+    }
+    return d.toLocaleDateString('ru-RU', { year: 'numeric', month: '2-digit', day: '2-digit' })
+        + ' ' +
+        d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+// --- ЦВЕТНЫЕ БЕЙДЖИ ДЛЯ СТАТУСОВ ---
+function statusBadge(status) {
+    if (!status) return '';
+    let text = status === 'new' ? 'Новая' : status === 'in_work' ? 'В работе' : status === 'done' ? 'Готово' : status;
+    let cls = 'badge-status ';
+    if (status === 'new') cls += 'status-new';
+    else if (status === 'in_work') cls += 'status-in_work';
+    else if (status === 'done') cls += 'status-done';
+    else cls += 'bg-secondary';
+    return `<span class="${cls}">${text}</span>`;
+}
+
+// --- ОСНОВНАЯ ЗАГРУЗКА ТАБЛИЦЫ ---
+async function loadAll() {
     document.getElementById('loader').style.display = "";
-    document.getElementById('tableDiv').style.display = "none";
+    document.getElementById('allTableDiv').style.display = "none";
     try {
-        const res = await apiFetch('/api/requests');
-        if(res.status !== 200) {
-            throw new Error('Ошибка запроса, авторизация истекла');
-        }
-        let allData = await res.json();
-        let tBody = document.getElementById('reqTbody');
+        const res = await apiFetch('/api/all_records');
+        if(res.status !== 200) throw new Error('Ошибка запроса, авторизация истекла');
+        let rows = await res.json();
+        let tBody = document.getElementById('allTbody');
         tBody.innerHTML = '';
-        for(const r of allData) {
+        for(const r of rows) {
+            let isDoc = r.file_id !== null && r.file_id !== undefined;
+            let safeUser = escapeHtml(String(r.user_id||""));
+            let safeName = escapeHtml(r.name||"");
+            let safePhone = escapeHtml(r.phone||"");
+            let safeMsg = escapeHtml(r.message||"");
+            let safeFile = escapeHtml(r.file_name||"");
+            let safeDate = formatDate(r.created_at||"");
+            let safeStatus = escapeHtml(r.status||"");
             tBody.innerHTML += `<tr>
-                <td>${r.name}</td>
-                <td>${r.phone}</td>
-                <td>${r.created_at}</td>
-                <td>${r.message}</td>
-                <td>${r.status}</td>
-                <td></td>
+              <td>${safeUser}</td>
+              <td>${safeName}</td>
+              <td>${safePhone}</td>
+              <td>
+                ${isDoc
+                  ? `<i class="ti ti-file-text"></i> <b>Документ:</b> ${safeFile}`
+                  : `<i class="ti ti-message"></i> ${safeMsg}`
+                }
+              </td>
+              <td class="nowrap">${safeDate}</td>
+              <td>${statusBadge(r.status)}</td>
+              <td>
+                ${isDoc
+                  ? `<a class="btn btn-sm btn-primary" title="Скачать" href="/api/download/${r.file_id}?token=${encodeURIComponent(adminToken)}" target="_blank">
+                        <i class="ti ti-download"></i>
+                    </a>`
+                  : ''
+                }
+              </td>
             </tr>`;
         }
         document.getElementById('loader').style.display = "none";
-        document.getElementById('tableDiv').style.display = "";
+        document.getElementById('allTableDiv').style.display = "";
     } catch(e) {
-        alert(e.message || 'Ошибка загрузки заявок');
-        checkAuth();
-    }
-}
-
-async function loadDocuments() {
-    try {
-        const res = await apiFetch('/api/documents');
-        if(res.status !== 200) throw new Error('Ошибка загрузки документов');
-        const docs = await res.json();
-        let tBody = document.getElementById('docTbody');
-        tBody.innerHTML = '';
-        for(const doc of docs) {
-            tBody.innerHTML += `<tr>
-                <td>${doc.user_id}</td>
-                <td>${doc.file_name}</td>
-                <td>${doc.sent_at}</td>
-                <td><a href="/api/download/${doc.file_id}?token=${encodeURIComponent(adminToken)}" target="_blank">Скачать</a></td>
-            </tr>`;
-        }
-    } catch(e) {
-        alert(e.message || 'Ошибка загрузки документов');
+        alert(e.message || 'Ошибка загрузки данных');
         checkAuth();
     }
 }
