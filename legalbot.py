@@ -15,7 +15,7 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage 
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
-from fastapi import FastAPI, Request, HTTPException, status, Cookie
+from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel 
 import uvicorn
@@ -134,13 +134,11 @@ class StatusRequest(BaseModel):
     status: str
 
 def check_admin_credentials(login: str, password: str) -> bool:
-    # Можно добавить больше логинов/паролей, если нужно
     return (login == ADMIN_LOGIN1 and password == ADMIN_PASSWORD1) or \
            (login == ADMIN_LOGIN2 and password == ADMIN_PASSWORD2)
 
-def authorize(request: Request, token_cookie: str = Cookie(None)):
-    # Проверка авторизации через cookie
-    if not token_cookie or token_cookie != ADMIN_TOKEN:
+def authorize(request: Request, token: str = None):
+    if not token or token != ADMIN_TOKEN:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
 @app.post("/api/login")
@@ -148,9 +146,7 @@ async def api_login(form: dict):
     login = form.get("login")
     password = form.get("password")
     if check_admin_credentials(login, password):
-        resp = JSONResponse({"status": "ok"})
-        resp.set_cookie("token_cookie", ADMIN_TOKEN, httponly=True, samesite="strict")
-        return resp
+        return JSONResponse({"status": "ok", "token": ADMIN_TOKEN})
     return JSONResponse({"status": "fail"}, status_code=401)
 
 @app.get("/") 
@@ -158,8 +154,9 @@ async def root():
     return {"status": "ok"}
 
 @app.get("/api/requests") 
-async def get_requests(request: Request, token_cookie: str = Cookie(None)): 
-    authorize(request, token_cookie)
+async def get_requests(request: Request):
+    token = request.headers.get("X-Admin-Token")
+    authorize(request, token)
     rows = conn.execute(
         "SELECT id, user_id, name, phone, message, created_at, status FROM requests ORDER BY created_at DESC"
     ).fetchall() 
@@ -177,8 +174,9 @@ async def get_requests(request: Request, token_cookie: str = Cookie(None)):
     ]
 
 @app.post("/api/reply")
-async def reply_user(req: ReplyRequest, request: Request, token_cookie: str = Cookie(None)):
-    authorize(request, token_cookie)
+async def reply_user(req: ReplyRequest, request: Request):
+    token = request.headers.get("X-Admin-Token")
+    authorize(request, token)
     try:
         await bot.send_message(req.user_id, req.message)
         with conn:
@@ -191,8 +189,9 @@ async def reply_user(req: ReplyRequest, request: Request, token_cookie: str = Co
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/status") 
-async def update_status(req: StatusRequest, request: Request, token_cookie: str = Cookie(None)): 
-    authorize(request, token_cookie)
+async def update_status(req: StatusRequest, request: Request): 
+    token = request.headers.get("X-Admin-Token")
+    authorize(request, token)
     with conn: 
         conn.execute("UPDATE requests SET status = ? WHERE user_id = ?", (req.status, req.user_id)) 
         return {"status": "updated"}
@@ -257,17 +256,12 @@ async def admin_html(request: Request):
     </div>
 </div>
 <script>
+let adminToken = null;
+
 async function checkAuth() {
-    // Проверяем авторизацию
-    let res = await fetch('/api/requests');
-    if (res.status === 401) {
-        document.getElementById('loginDiv').style.display = '';
-        document.getElementById('adminDiv').style.display = 'none';
-    } else {
-        document.getElementById('loginDiv').style.display = 'none';
-        document.getElementById('adminDiv').style.display = '';
-        load();
-    }
+    adminToken = null;
+    document.getElementById('loginDiv').style.display = '';
+    document.getElementById('adminDiv').style.display = 'none';
 }
 document.getElementById('loginBtn').onclick = async function() {
     const login = document.getElementById('loginInput').value;
@@ -278,6 +272,8 @@ document.getElementById('loginBtn').onclick = async function() {
         body: JSON.stringify({login, password})
     });
     if (res.status === 200) {
+        let data = await res.json();
+        adminToken = data.token;
         document.getElementById('loginDiv').style.display = 'none';
         document.getElementById('adminDiv').style.display = '';
         document.getElementById('loginError').style.display = 'none';
@@ -286,9 +282,32 @@ document.getElementById('loginBtn').onclick = async function() {
         document.getElementById('loginError').style.display = '';
     }
 };
+
 window.onload = checkAuth;
 
-// ... остальной JS-код таблицы заявок (оставь без изменений)
+// Используй apiFetch для всех защищённых запросов
+async function apiFetch(url, options = {}) {
+    options.headers = options.headers || {};
+    if(adminToken) options.headers['X-Admin-Token'] = adminToken;
+    return fetch(url, options);
+}
+
+// Дальше везде вместо fetch('/api/requests') используй apiFetch('/api/requests')
+// Например:
+async function load() {
+    document.getElementById('loader').style.display = "";
+    document.getElementById('tableDiv').style.display = "none";
+    const res = await apiFetch('/api/requests');
+    if(res.status !== 200) {
+        checkAuth();
+        return;
+    }
+    let allData = await res.json();
+    // ... далее отображай заявки как раньше
+    document.getElementById('loader').style.display = "none";
+    document.getElementById('tableDiv').style.display = "";
+    // renderTable(allData) и т.д.
+}
 </script>
 </body>
 </html>
