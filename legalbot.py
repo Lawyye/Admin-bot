@@ -184,11 +184,17 @@ load();
 </html>
 """
 
-@dp.message(lambda m: m.text == "Часто задаваемые вопросы") async def show_faq(message: types.Message): await message.answer("Часто задаваемые вопросы пока не добавлены.")
+@dp.message(lambda m: m.text == "Часто задаваемые вопросы") 
+async def show_faq(message: types.Message): 
+    await message.answer("Часто задаваемые вопросы пока не добавлены.")
 
-@dp.message(lambda m: m.text == "Отправить документ") async def ask_document(message: types.Message): await message.answer("Пожалуйста, отправьте документ (PDF, DOCX и т.д.)")
+@dp.message(lambda m: m.text == "Отправить документ") 
+async def ask_document(message: types.Message): 
+    await message.answer("Пожалуйста, отправьте документ (PDF, DOCX и т.д.)")
 
-@dp.message(lambda m: m.document) async def handle_document(message: types.Message): await message.answer("Документ получен. Спасибо!")
+@dp.message(lambda m: m.document) 
+async def handle_document(message: types.Message): 
+    await message.answer("Документ получен. Спасибо!")
 
 def run_web(): uvicorn.run(app, host="0.0.0.0", port=8000)
 
