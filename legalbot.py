@@ -8,7 +8,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext 
 from aiogram.fsm.state import StatesGroup, State 
 from aiogram.fsm.storage.memory import MemoryStorage 
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 from fastapi import FastAPI, Request, HTTPException, status 
 from fastapi.responses import HTMLResponse 
@@ -105,7 +105,11 @@ async def admin_panel(message: types.Message):
     if message.from_user.id != ADMIN_CHAT_ID:
         await message.answer("Доступ запрещён.")
         return
-    await message.answer("Админ-панель: https:web-production-bb98.up.railway.app/admin?token=secure-token-123", reply_markup=get_menu_kb(message.from_user.id))
+    admin_url = "https://web-production-bb98.up.railway.app/admin?token=secure-token-123"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Перейти в админку", url=admin_url)]
+    ])
+    await message.answer("Откройте админ-панель:", reply_markup=kb)
 
 app = FastAPI()
 
