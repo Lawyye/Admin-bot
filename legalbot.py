@@ -172,7 +172,7 @@ def get_user_language(user_id: int) -> str:
     row = conn.execute(
         "SELECT language FROM user_languages WHERE user_id = ?", (user_id,)
     ).fetchone()
-    return row[0] if row else 'ru'
+    return row[0] if row else None
 
 def get_menu_kb(user_id: int, lang: str = 'ru'):
     t = translations[lang]
@@ -220,15 +220,13 @@ async def start(message: types.Message, state: FSMContext):
     saved_lang = get_user_language(user_id)
     
     # Если язык не сохранен, предлагаем выбрать
-    if not saved_lang or saved_lang == 'ru':  # Проверяем, если это первый запуск
-        data = await state.get_data()
-        if not data.get('lang'):
-            await state.set_state(RequestForm.language)
-            await message.answer(
-                translations['ru']['choose_language'], 
-                reply_markup=get_lang_kb()
-            )
-            return
+    if not saved_lang:  # ИСПРАВЛЕНО: убрана проверка на 'ru'
+        await state.set_state(RequestForm.language)
+        await message.answer(
+            translations['ru']['choose_language'], 
+            reply_markup=get_lang_kb()
+        )
+        return
     
     # Используем сохраненный язык
     lang = saved_lang
@@ -261,8 +259,8 @@ async def choose_lang(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     save_user_language(user_id, lang)
     
-    # Обновляем состояние
-    await state.update_data(lang=lang)
+    # Очищаем состояние ПЕРЕД показом главного меню
+    await state.clear()
     
     # Показываем главное меню
     await bot.send_photo(
@@ -271,9 +269,6 @@ async def choose_lang(message: types.Message, state: FSMContext):
         caption=translations[lang]['welcome'],
         reply_markup=get_menu_kb(user_id, lang)
     )
-    
-    # Сбрасываем состояние языка
-    await state.clear()
 
 @dp.message(lambda m: m.text in [translations['ru']['contacts_button'], translations['en']['contacts_button']])
 async def contacts(message: types.Message, state: FSMContext):
@@ -394,7 +389,7 @@ async def attach_docs_menu(message: types.Message, state: FSMContext):
 
 async def finish_request(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    lang = data.get('lang') or get_user_language(message.from_user.id)
+    lang = data.get('lang') or get_user_language(message.from_user.id) or 'ru'
     from datetime import datetime
     now = datetime.now().isoformat()
     user_id = message.from_user.id
@@ -494,59 +489,8 @@ async def get_requests(request: Request):
         })
     return result
 
-@app.get("/api/download/{file_id}")
-async def download_document(file_id: str, request: Request):
-    token = request.headers.get("X-Admin-Token") or request.query_params.get("token")
-    authorize(request, token)
-    row = conn.execute("SELECT file_name FROM documents WHERE file_id = ?", (file_id,)).fetchone()
-    file_name = row[0] if row else file_id
-    url = f"https://api.telegram.org/bot{API_TOKEN}/getFile?file_id={file_id}"
-    import requests
-    resp = requests.get(url)
-    if not resp.ok or 'result' not in resp.json():
-        raise HTTPException(status_code=404, detail="Файл не найден в Telegram")
-    file_path = resp.json()['result']['file_path']
-    file_url = f"https://api.telegram.org/file/bot{API_TOKEN}/{file_path}"
-    file_resp = requests.get(file_url, stream=True)
-    import urllib.parse
-    import mimetypes
-    mime_type, _ = mimetypes.guess_type(file_name)
-    if not mime_type:
-        mime_type = "application/octet-stream"
-    try:
-        file_name.encode('latin-1')
-        content_disposition = f'attachment; filename="{file_name}"'
-    except UnicodeEncodeError:
-        quoted_name = urllib.parse.quote(file_name)
-        content_disposition = f"attachment; filename*=UTF-8''{quoted_name}"
-    headers = {
-        "Content-Disposition": content_disposition
-    }
-    return StreamingResponse(file_resp.raw, headers=headers, media_type=mime_type)
+# Добавьте остальные эндпоинты FastAPI здесь...
 
-@app.post("/api/reply")
-async def reply_user(req: ReplyRequest, request: Request):
-    token = request.headers.get("X-Admin-Token")
-    authorize(request, token)
-    try:
-        await bot.send_message(req.user_id, req.message)
-        with conn:
-            conn.execute("UPDATE requests SET status = 'done' WHERE user_id = ?", (req.user_id,))
-        return {"status": "sent"}
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        logging.error(f"Ошибка отправки сообщения: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/status")
-async def update_status(req: StatusRequest, request: Request):
-    token = request.headers.get("X-Admin-Token")
-    authorize(request, token)
-    with conn:
-        conn.execute("UPDATE requests SET status = ? WHERE user_id = ?", (req.status, req.user_id))
-    return {"status": "ok"}
-
-# --- Запуск aiogram polling ---
 if __name__ == "__main__":
-    asyncio.run(dp.start_polling(bot))
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
