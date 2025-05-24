@@ -127,13 +127,19 @@ async def get_requests(request: Request):
         for r in rows
     ]
 
-@app.post("/api/reply") 
-async def reply_user(req: ReplyRequest, request: Request): 
-    authorize(request) 
-    await bot.send_message(req.user_id, req.message) 
-    with conn: 
-        conn.execute("UPDATE requests SET status = 'done' WHERE user_id = ?", (req.user_id,)) 
+@app.post("/api/reply")
+async def reply_user(req: ReplyRequest, request: Request):
+    authorize(request)
+    try:
+        await bot.send_message(req.user_id, req.message)
+        with conn:
+            conn.execute("UPDATE requests SET status = 'done' WHERE user_id = ?", (req.user_id,))
         return {"status": "sent"}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        logging.error(f"Ошибка отправки сообщения: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/status") 
 async def update_status(req: StatusRequest, request: Request): 
