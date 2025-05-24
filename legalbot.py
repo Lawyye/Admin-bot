@@ -61,16 +61,19 @@ c.execute("""
     )""")
 conn.commit()
 
+# Новый FSM: добавлены attach, document, document_more
 class RequestForm(StatesGroup):
     name = State()
     phone = State()
     message = State()
+    attach = State()
+    document = State()
+    document_more = State()
 
 def get_menu_kb(user_id: int):
     keyboard = [
         [KeyboardButton(text="Записаться на консультацию")],
         [KeyboardButton(text="Часто задаваемые вопросы")],
-        [KeyboardButton(text="Отправить документ")],
         [KeyboardButton(text="Контакты")]
     ]
     if user_id in ADMINS:
@@ -104,21 +107,120 @@ async def get_phone(message: types.Message, state: FSMContext):
     await message.answer("Опишите вашу проблему:", reply_markup=get_menu_kb(message.from_user.id))
 
 @dp.message(RequestForm.message)
-async def save_request(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    from datetime import datetime
-    now = datetime.now().isoformat()
-    with conn:
-        conn.execute(
-            "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)",
-            (message.from_user.id, data['name'], data['phone'], message.text, now, 'new')
-        )
+async def ask_attach(message: types.Message, state: FSMContext):
+    await state.update_data(message=message.text)
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Да"), KeyboardButton(text="Нет")]],
+        resize_keyboard=True, one_time_keyboard=True
+    )
+    await message.answer("У вас есть документы, которые вы хотите прикрепить? (До 3 файлов)", reply_markup=kb)
+    await state.set_state(RequestForm.attach)
+
+@dp.message(RequestForm.attach)
+async def handle_attach_choice(message: types.Message, state: FSMContext):
+    choice = message.text.strip().lower()
+    if choice == "нет":
+        # Отправляем заявку без документов
+        data = await state.get_data()
+        from datetime import datetime
+        now = datetime.now().isoformat()
+        with conn:
+            conn.execute(
+                "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)",
+                (message.from_user.id, data['name'], data['phone'], data['message'], now, 'new')
+            )
         await bot.send_message(
             ADMIN_CHAT_ID,
-            f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {message.text}"
+            f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {data['message']}"
         )
         await message.answer("Спасибо! Мы свяжемся с вами.", reply_markup=get_menu_kb(message.from_user.id))
         await state.clear()
+    elif choice == "да":
+        await state.update_data(documents=[])
+        await message.answer("Пожалуйста, отправьте первый документ (PDF, DOCX и т.д.).")
+        await state.set_state(RequestForm.document)
+    else:
+        await message.answer("Пожалуйста, выберите \"Да\" или \"Нет\".")
+
+@dp.message(RequestForm.document)
+async def handle_document_in_request(message: types.Message, state: FSMContext):
+    if not message.document:
+        await message.answer("Пожалуйста, отправьте файл-документ.")
+        return
+    data = await state.get_data()
+    documents = data.get("documents", [])
+    from datetime import datetime
+    file_id = message.document.file_id
+    file_name = message.document.file_name
+    user_id = message.from_user.id
+    sent_at = datetime.now().isoformat()
+    documents.append({"file_id": file_id, "file_name": file_name, "sent_at": sent_at})
+    await state.update_data(documents=documents)
+    if len(documents) < 3:
+        # спросить, хочет ли пользователь ещё документ
+        kb = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="Да"), KeyboardButton(text="Нет")]],
+            resize_keyboard=True, one_time_keyboard=True
+        )
+        await message.answer(f"Документ добавлен. Хотите прикрепить ещё один документ? ({len(documents)}/3)", reply_markup=kb)
+        await state.set_state(RequestForm.document_more)
+    else:
+        await message.answer("Это был третий документ — лимит достигнут. Заявка отправляется.")
+        await finish_request_with_documents(message, state)
+
+@dp.message(RequestForm.document_more)
+async def handle_more_docs(message: types.Message, state: FSMContext):
+    choice = message.text.strip().lower()
+    data = await state.get_data()
+    documents = data.get("documents", [])
+    if choice == "да":
+        if len(documents) < 3:
+            await message.answer("Пожалуйста, отправьте следующий документ (PDF, DOCX и т.д.).")
+            await state.set_state(RequestForm.document)
+        else:
+            await message.answer("Вы уже прикрепили 3 документа. Заявка отправляется.")
+            await finish_request_with_documents(message, state)
+    elif choice == "нет":
+        await finish_request_with_documents(message, state)
+    else:
+        await message.answer("Пожалуйста, выберите \"Да\" или \"Нет\".")
+
+async def finish_request_with_documents(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    from datetime import datetime
+    now = datetime.now().isoformat()
+    user_id = message.from_user.id
+    # Сохраняем заявку
+    with conn:
+        conn.execute(
+            "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, data['name'], data['phone'], data['message'], now, 'new')
+        )
+    # Сохраняем документы и отправляем админу
+    documents = data.get("documents", [])
+    if documents:
+        await bot.send_message(
+            ADMIN_CHAT_ID,
+            f"Новая заявка с документами:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {data['message']}"
+        )
+        for doc in documents:
+            with conn:
+                conn.execute(
+                    "INSERT INTO documents (user_id, file_id, file_name, sent_at) VALUES (?, ?, ?, ?)",
+                    (user_id, doc["file_id"], doc["file_name"], doc["sent_at"])
+                )
+            await bot.send_document(
+                ADMIN_CHAT_ID,
+                doc["file_id"],
+                caption=f"Документ от пользователя {message.from_user.full_name} ({user_id})"
+            )
+    else:
+        await bot.send_message(
+            ADMIN_CHAT_ID,
+            f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {data['message']}"
+        )
+    await message.answer("Спасибо! Мы свяжемся с вами.", reply_markup=get_menu_kb(user_id))
+    await state.clear()
 
 @dp.message(lambda m: m.text == "Админ-панель")
 async def admin_panel(message: types.Message):
@@ -202,20 +304,39 @@ async def get_documents(request: Request):
 @app.get("/api/download/{file_id}")
 async def download_document(file_id: str, request: Request):
     # Accept token from header or from query param
+    import requests
     token = request.headers.get("X-Admin-Token") or request.query_params.get("token")
     authorize(request, token)
+
+    # Получаем имя файла из базы
+    row = conn.execute(
+        "SELECT file_name FROM documents WHERE file_id = ?", (file_id,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Файл не найден в базе")
+
+    file_name = row[0]
+
     url = f"https://api.telegram.org/bot{API_TOKEN}/getFile?file_id={file_id}"
-    import requests
     resp = requests.get(url)
-    if not resp.ok or 'result' not in resp.json():
-        raise HTTPException(status_code=404, detail="Файл не найден в Telegram")
-    file_path = resp.json()['result']['file_path']
+    data = resp.json()
+    if not resp.ok or 'result' not in data:
+        detail = data.get("description", "Файл не найден в Telegram")
+        raise HTTPException(status_code=404, detail=detail)
+    file_path = data['result']['file_path']
     file_url = f"https://api.telegram.org/file/bot{API_TOKEN}/{file_path}"
     file_resp = requests.get(file_url, stream=True)
+    if not file_resp.ok:
+        raise HTTPException(status_code=404, detail="Ошибка скачивания файла с Telegram серверов")
+
+    # Определяем Content-Type по расширению
+    from mimetypes import guess_type
+    content_type = guess_type(file_name)[0] or "application/octet-stream"
+
     headers = {
-        "Content-Disposition": f'attachment; filename="{file_id}"'
+        "Content-Disposition": f'attachment; filename="{file_name}"'
     }
-    return StreamingResponse(file_resp.raw, headers=headers)
+    return StreamingResponse(file_resp.raw, headers=headers, media_type=content_type)
 
 @app.post("/api/reply")
 async def reply_user(req: ReplyRequest, request: Request):
@@ -415,28 +536,7 @@ async function loadDocuments() {
 async def show_faq(message: types.Message):
     await message.answer("Часто задаваемые вопросы пока не добавлены.", reply_markup=get_menu_kb(message.from_user.id))
 
-@dp.message(lambda m: m.text == "Отправить документ")
-async def ask_document(message: types.Message):
-    await message.answer("Пожалуйста, отправьте документ (PDF, DOCX и т.д.)", reply_markup=get_menu_kb(message.from_user.id))
-
-@dp.message(lambda m: m.document)
-async def handle_document(message: types.Message):
-    from datetime import datetime
-    file_id = message.document.file_id
-    file_name = message.document.file_name
-    user_id = message.from_user.id
-    sent_at = datetime.now().isoformat()
-    with conn:
-        conn.execute(
-            "INSERT INTO documents (user_id, file_id, file_name, sent_at) VALUES (?, ?, ?, ?)",
-            (user_id, file_id, file_name, sent_at)
-        )
-    await bot.send_document(
-        ADMIN_CHAT_ID,
-        file_id,
-        caption=f"Документ от пользователя {message.from_user.full_name} ({user_id})"
-    )
-    await message.answer("Документ получен и отправлен администратору. Спасибо!", reply_markup=get_menu_kb(user_id))
+# Удалены старые обработчики "Отправить документ" и document вне FSM
 
 async def main():
     config = uvicorn.Config(app, host="0.0.0.0", port=8000, loop="asyncio", log_level="info")
