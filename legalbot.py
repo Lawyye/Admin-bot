@@ -5,6 +5,7 @@ import os
 
 from dotenv import load_dotenv
 
+# Загружаем переменные из .env файла
 load_dotenv()
 
 from aiogram import Bot, Dispatcher, types
@@ -12,7 +13,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -26,6 +27,7 @@ if not ADMIN_CHAT_ID_ENV:
 ADMIN_CHAT_ID = int(ADMIN_CHAT_ID_ENV)
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "secure-token-123")
 
+# Логины и пароли админов из .env
 ADMIN_LOGIN1 = os.getenv("ADMIN_LOGIN1")
 ADMIN_PASSWORD1 = os.getenv("ADMIN_PASSWORD1")
 ADMIN_LOGIN2 = os.getenv("ADMIN_LOGIN2")
@@ -63,26 +65,17 @@ class RequestForm(StatesGroup):
     name = State()
     phone = State()
     message = State()
-    ask_document = State()
-    wait_documents = State()
 
 def get_menu_kb(user_id: int):
     keyboard = [
         [KeyboardButton(text="Записаться на консультацию")],
         [KeyboardButton(text="Часто задаваемые вопросы")],
+        [KeyboardButton(text="Отправить документ")],
         [KeyboardButton(text="Контакты")]
     ]
     if user_id in ADMINS:
         keyboard.append([KeyboardButton(text="Админ-панель")])
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
-
-def yes_no_kb():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Да"), KeyboardButton(text="Нет")]
-        ],
-        resize_keyboard=True, one_time_keyboard=True
-    )
 
 @dp.message(CommandStart())
 async def start(message: types.Message):
@@ -111,80 +104,21 @@ async def get_phone(message: types.Message, state: FSMContext):
     await message.answer("Опишите вашу проблему:", reply_markup=get_menu_kb(message.from_user.id))
 
 @dp.message(RequestForm.message)
-async def after_message(message: types.Message, state: FSMContext):
-    await state.update_data(message_text=message.text)
-    await state.set_state(RequestForm.ask_document)
-    # Сохраняем заявку сразу
-    from datetime import datetime
+async def save_request(message: types.Message, state: FSMContext):
     data = await state.get_data()
+    from datetime import datetime
     now = datetime.now().isoformat()
     with conn:
         conn.execute(
             "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)",
             (message.from_user.id, data['name'], data['phone'], message.text, now, 'new')
         )
-    await bot.send_message(
-        ADMIN_CHAT_ID,
-        f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {message.text}"
-    )
-    await message.answer(
-        "У вас есть документ, который вы хотите отправить?",
-        reply_markup=yes_no_kb()
-    )
-
-@dp.message(RequestForm.ask_document)
-async def ask_document_step(message: types.Message, state: FSMContext):
-    if message.text.lower() == "да":
-        await state.set_state(RequestForm.wait_documents)
-        await state.update_data(doc_count=0)
-        await message.answer(
-            "Отправьте, пожалуйста, документ (до 3 файлов). Когда закончите — нажмите 'Готово' или просто ничего не отправляйте.",
-            reply_markup=ReplyKeyboardMarkup(
-                keyboard=[[KeyboardButton(text="Готово")]],
-                resize_keyboard=True
-            )
+        await bot.send_message(
+            ADMIN_CHAT_ID,
+            f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {message.text}"
         )
-    else:
         await message.answer("Спасибо! Мы свяжемся с вами.", reply_markup=get_menu_kb(message.from_user.id))
         await state.clear()
-
-@dp.message(RequestForm.wait_documents)
-async def handle_documents(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    doc_count = data.get("doc_count", 0)
-    if message.text and message.text.lower() == "готово":
-        await message.answer("Спасибо! Мы свяжемся с вами.", reply_markup=get_menu_kb(message.from_user.id))
-        await state.clear()
-        return
-    if message.document:
-        if doc_count < 3:
-            from datetime import datetime
-            file_id = message.document.file_id
-            file_name = message.document.file_name
-            user_id = message.from_user.id
-            sent_at = datetime.now().isoformat()
-            with conn:
-                conn.execute(
-                    "INSERT INTO documents (user_id, file_id, file_name, sent_at) VALUES (?, ?, ?, ?)",
-                    (user_id, file_id, file_name, sent_at)
-                )
-            await bot.send_document(
-                ADMIN_CHAT_ID,
-                file_id,
-                caption=f"Документ от пользователя {message.from_user.full_name} ({user_id})"
-            )
-            doc_count += 1
-            await state.update_data(doc_count=doc_count)
-            if doc_count == 3:
-                await message.answer("Вы отправили максимальное количество документов. Спасибо! Мы свяжемся с вами.", reply_markup=get_menu_kb(user_id))
-                await state.clear()
-            else:
-                await message.answer(f"Документ получен. Можно отправить ещё {3 - doc_count} файл(а). Когда закончите — нажмите 'Готово'.")
-        else:
-            await message.answer("Вы уже отправили максимальное количество документов.", reply_markup=get_menu_kb(message.from_user.id))
-            await state.clear()
-    else:
-        await message.answer("Пожалуйста, отправьте документ или нажмите 'Готово' если больше ничего не хотите отправлять.")
 
 @dp.message(lambda m: m.text == "Админ-панель")
 async def admin_panel(message: types.Message):
@@ -234,36 +168,27 @@ async def get_requests(request: Request):
     rows = conn.execute(
         "SELECT id, user_id, name, phone, message, created_at, status FROM requests ORDER BY created_at DESC"
     ).fetchall()
-    return [
-        {
+    # Получаем документы к каждой заявке
+    result = []
+    for r in rows:
+        docs = conn.execute(
+            "SELECT file_id, file_name, sent_at FROM documents WHERE user_id = ?", (r[1],)
+        ).fetchall()
+        doc_list = [
+            {"file_id": d[0], "file_name": d[1], "sent_at": d[2]}
+            for d in docs
+        ]
+        result.append({
             "id": r[0],
             "user_id": r[1],
             "name": r[2],
             "phone": r[3],
             "message": r[4],
             "created_at": r[5],
-            "status": r[6]
-        }
-        for r in rows
-    ]
-
-@app.get("/api/documents")
-async def get_documents(request: Request):
-    token = request.headers.get("X-Admin-Token")
-    authorize(request, token)
-    rows = conn.execute(
-        "SELECT id, user_id, file_id, file_name, sent_at FROM documents ORDER BY sent_at DESC"
-    ).fetchall()
-    return [
-        {
-            "id": r[0],
-            "user_id": r[1],
-            "file_id": r[2],
-            "file_name": r[3],
-            "sent_at": r[4]
-        }
-        for r in rows
-    ]
+            "status": r[6],
+            "documents": doc_list
+        })
+    return result
 
 @app.get("/api/download/{file_id}")
 async def download_document(file_id: str, request: Request):
@@ -287,7 +212,7 @@ async def download_document(file_id: str, request: Request):
         quoted_name = urllib.parse.quote(file_name)
         content_disposition = f"attachment; filename*=UTF-8''{quoted_name}"
     headers = {"Content-Disposition": content_disposition}
-    return StreamingResponse(file_resp.raw, headers=headers)
+    return StreamingResponse(file_resp.raw, headers=headers, media_type=file_resp.headers.get('Content-Type', 'application/octet-stream'))
 
 @app.post("/api/reply")
 async def reply_user(req: ReplyRequest, request: Request):
@@ -341,21 +266,16 @@ async def admin_html(request: Request):
             text-decoration: none !important;
             cursor: pointer;
             transition: background 0.2s;
+            margin-bottom: 2px;
         }
-        .btn-download:hover {
-            background-color: #1a5ba6;
-        }
+        .btn-download:hover { background-color: #1a5ba6; }
+        th, td { border-right: 1px solid #dde2e9; }
+        th:last-child, td:last-child { border-right: none; }
         @media (max-width: 600px) {
             .btn-download {
                 font-size: 0.98rem;
                 padding: 0.3rem 0.7rem;
             }
-        }
-        th, td {
-            border-right: 1px solid #dde2e9;
-        }
-        th:last-child, td:last-child {
-            border-right: none;
         }
     </style>
 </head>
@@ -393,30 +313,26 @@ async def admin_html(request: Request):
                         <th>СООБЩЕНИЕ</th>
                         <th>ВРЕМЯ</th>
                         <th>СТАТУС</th>
+                        <th>ДОКУМЕНТЫ</th>
                         <th>ДЕЙСТВИЯ</th>
                     </tr>
                 </thead>
                 <tbody id="reqTbody"></tbody>
             </table>
         </div>
-        <div id="documentsDiv" class="mt-4">
-          <h3>Документы</h3>
-          <table class="table table-striped" id="docTable">
-              <thead>
-                  <tr>
-                      <th>Пользователь</th>
-                      <th>Имя файла</th>
-                      <th>Дата</th>
-                      <th>Скачать</th>
-                  </tr>
-              </thead>
-              <tbody id="docTbody"></tbody>
-          </table>
-      </div>
     </div>
 </div>
 <script>
 let adminToken = null;
+
+function formatDatetime(dt) {
+    // Преобразование строки ISO в формат DD.MM.YYYY HH:mm
+    if (!dt) return "";
+    const d = new Date(dt);
+    const pad = n => n < 10 ? "0"+n : n;
+    return pad(d.getDate()) + "." + pad(d.getMonth()+1) + "." + d.getFullYear() +
+        " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
 
 async function checkAuth() {
     adminToken = null;
@@ -438,7 +354,6 @@ document.getElementById('loginBtn').onclick = async function() {
         document.getElementById('adminDiv').style.display = '';
         document.getElementById('loginError').style.display = 'none';
         load();
-        loadDocuments();
     } else {
         document.getElementById('loginError').style.display = '';
     }
@@ -452,7 +367,6 @@ document.getElementById('logoutBtn').onclick = function() {
 
 window.onload = checkAuth;
 
-// Функция для защищённых API-запросов
 async function apiFetch(url, options = {}) {
     options.headers = options.headers || {};
     if(adminToken) options.headers['X-Admin-Token'] = adminToken;
@@ -471,13 +385,20 @@ async function load() {
         let tBody = document.getElementById('reqTbody');
         tBody.innerHTML = '';
         for(const r of allData) {
+            let docsHtml = '';
+            if (r.documents && r.documents.length > 0) {
+                docsHtml = r.documents.map(doc => 
+                    `<a class="btn-download" href="/api/download/${doc.file_id}?token=${encodeURIComponent(adminToken)}" target="_blank">${doc.file_name}</a>`
+                ).join("<br>");
+            }
             tBody.innerHTML += `<tr>
                 <td>${r.user_id}</td>
-                <td>${r.name}</td>
-                <td>${r.phone}</td>
-                <td>${r.message}</td>
-                <td>${r.created_at}</td>
+                <td>${r.name ?? ""}</td>
+                <td>${r.phone ?? ""}</td>
+                <td>${r.message ?? ""}</td>
+                <td>${formatDatetime(r.created_at)}</td>
                 <td>${r.status}</td>
+                <td>${docsHtml}</td>
                 <td></td>
             </tr>`;
         }
@@ -485,31 +406,6 @@ async function load() {
         document.getElementById('tableDiv').style.display = "";
     } catch(e) {
         alert(e.message || 'Ошибка загрузки заявок');
-        checkAuth();
-    }
-}
-
-async function loadDocuments() {
-    try {
-        const res = await apiFetch('/api/documents');
-        if(res.status !== 200) throw new Error('Ошибка загрузки документов');
-        const docs = await res.json();
-        let tBody = document.getElementById('docTbody');
-        tBody.innerHTML = '';
-        for(const doc of docs) {
-            tBody.innerHTML += `<tr>
-                <td>${doc.user_id}</td>
-                <td>${doc.file_name}</td>
-                <td>${doc.sent_at}</td>
-                <td>
-                  <a class="btn-download" href="/api/download/${doc.file_id}?token=${encodeURIComponent(adminToken)}" target="_blank">
-                    Скачать
-                  </a>
-                </td>
-            </tr>`;
-        }
-    } catch(e) {
-        alert(e.message || 'Ошибка загрузки документов');
         checkAuth();
     }
 }
@@ -521,6 +417,29 @@ async function loadDocuments() {
 @dp.message(lambda m: m.text == "Часто задаваемые вопросы")
 async def show_faq(message: types.Message):
     await message.answer("Часто задаваемые вопросы пока не добавлены.", reply_markup=get_menu_kb(message.from_user.id))
+
+@dp.message(lambda m: m.text == "Отправить документ")
+async def ask_document(message: types.Message):
+    await message.answer("Пожалуйста, отправьте документ (PDF, DOCX и т.д.)", reply_markup=get_menu_kb(message.from_user.id))
+
+@dp.message(lambda m: m.document)
+async def handle_document(message: types.Message):
+    from datetime import datetime
+    file_id = message.document.file_id
+    file_name = message.document.file_name
+    user_id = message.from_user.id
+    sent_at = datetime.now().isoformat()
+    with conn:
+        conn.execute(
+            "INSERT INTO documents (user_id, file_id, file_name, sent_at) VALUES (?, ?, ?, ?)",
+            (user_id, file_id, file_name, sent_at)
+        )
+    await bot.send_document(
+        ADMIN_CHAT_ID,
+        file_id,
+        caption=f"Документ от пользователя {message.from_user.full_name} ({user_id})"
+    )
+    await message.answer("Документ получен и отправлен администратору. Спасибо!", reply_markup=get_menu_kb(user_id))
 
 async def main():
     config = uvicorn.Config(app, host="0.0.0.0", port=8000, loop="asyncio", log_level="info")
