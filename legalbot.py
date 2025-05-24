@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import sqlite3
 import os
 
 from dotenv import load_dotenv
@@ -19,6 +18,7 @@ from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 import uvicorn
+import aiosqlite
 
 API_TOKEN = os.getenv("API_TOKEN")
 ADMIN_CHAT_ID_ENV = os.getenv("ADMIN_CHAT_ID")
@@ -39,27 +39,30 @@ bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 logging.basicConfig(level=logging.INFO)
 
-conn = sqlite3.connect("bot.db", check_same_thread=False)
-c = conn.cursor()
-c.execute("""
-    CREATE TABLE IF NOT EXISTS requests (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        name TEXT,
-        phone TEXT,
-        message TEXT,
-        created_at TEXT,
-        status TEXT DEFAULT 'new'
-    )""")
-c.execute("""
-    CREATE TABLE IF NOT EXISTS documents (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        file_id TEXT,
-        file_name TEXT,
-        sent_at TEXT
-    )""")
-conn.commit()
+db = None
+
+async def init_db():
+    global db
+    db = await aiosqlite.connect("bot.db")
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            name TEXT,
+            phone TEXT,
+            message TEXT,
+            created_at TEXT,
+            status TEXT DEFAULT 'new'
+        )""")
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            file_id TEXT,
+            file_name TEXT,
+            sent_at TEXT
+        )""")
+    await db.commit()
 
 class RequestForm(StatesGroup):
     name = State()
@@ -149,18 +152,17 @@ async def finish_request(message: types.Message, state: FSMContext):
     from datetime import datetime
     now = datetime.now().isoformat()
     user_id = message.from_user.id
-    with conn:
-        conn.execute(
-            "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)",
-            (user_id, data['name'], data['phone'], data['message'], now, 'new')
+    await db.execute(
+        "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, data['name'], data['phone'], data['message'], now, 'new')
+    )
+    docs = data.get('documents', [])
+    for doc in docs:
+        await db.execute(
+            "INSERT INTO documents (user_id, file_id, file_name, sent_at) VALUES (?, ?, ?, ?)",
+            (user_id, doc['file_id'], doc['file_name'], now)
         )
-        # Документы, если есть
-        docs = data.get('documents', [])
-        for doc in docs:
-            conn.execute(
-                "INSERT INTO documents (user_id, file_id, file_name, sent_at) VALUES (?, ?, ?, ?)",
-                (user_id, doc['file_id'], doc['file_name'], now)
-            )
+    await db.commit()
     await bot.send_message(
         ADMIN_CHAT_ID,
         f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {data['message']}" +
@@ -214,15 +216,16 @@ async def root():
 async def get_requests(request: Request):
     token = request.headers.get("X-Admin-Token")
     authorize(request, token)
-    rows = conn.execute(
-        "SELECT id, user_id, name, phone, message, created_at, status FROM requests ORDER BY created_at DESC"
-    ).fetchall()
-    # Получаем документы к каждой заявке
     result = []
+    async with db.execute(
+        "SELECT id, user_id, name, phone, message, created_at, status FROM requests ORDER BY created_at DESC"
+    ) as cursor:
+        rows = await cursor.fetchall()
     for r in rows:
-        docs = conn.execute(
+        async with db.execute(
             "SELECT file_id, file_name, sent_at FROM documents WHERE user_id = ?", (r[1],)
-        ).fetchall()
+        ) as doc_cursor:
+            docs = await doc_cursor.fetchall()
         doc_list = [
             {"file_id": d[0], "file_name": d[1], "sent_at": d[2]}
             for d in docs
@@ -243,8 +246,8 @@ async def get_requests(request: Request):
 async def download_document(file_id: str, request: Request):
     token = request.headers.get("X-Admin-Token") or request.query_params.get("token")
     authorize(request, token)
-    # Имя файла из базы (если нет — используем file_id)
-    row = conn.execute("SELECT file_name FROM documents WHERE file_id = ?", (file_id,)).fetchone()
+    async with db.execute("SELECT file_name FROM documents WHERE file_id = ?", (file_id,)) as cursor:
+        row = await cursor.fetchone()
     file_name = row[0] if row else file_id
     url = f"https://api.telegram.org/bot{API_TOKEN}/getFile?file_id={file_id}"
     import requests
@@ -255,7 +258,6 @@ async def download_document(file_id: str, request: Request):
     file_url = f"https://api.telegram.org/file/bot{API_TOKEN}/{file_path}"
     file_resp = requests.get(file_url, stream=True)
     import urllib.parse
-    # --- Добавляем определение Content-Type ---
     import mimetypes
     mime_type, _ = mimetypes.guess_type(file_name)
     if not mime_type:
@@ -269,7 +271,6 @@ async def download_document(file_id: str, request: Request):
     headers = {
         "Content-Disposition": content_disposition
     }
-    # --- Передаем content_type в StreamingResponse ---
     return StreamingResponse(file_resp.raw, headers=headers, media_type=mime_type)
 
 @app.post("/api/reply")
@@ -278,8 +279,8 @@ async def reply_user(req: ReplyRequest, request: Request):
     authorize(request, token)
     try:
         await bot.send_message(req.user_id, req.message)
-        with conn:
-            conn.execute("UPDATE requests SET status = 'done' WHERE user_id = ?", (req.user_id,))
+        await db.execute("UPDATE requests SET status = 'done' WHERE user_id = ?", (req.user_id,))
+        await db.commit()
         return {"status": "sent"}
     except Exception as e:
         import traceback
@@ -291,9 +292,9 @@ async def reply_user(req: ReplyRequest, request: Request):
 async def update_status(req: StatusRequest, request: Request):
     token = request.headers.get("X-Admin-Token")
     authorize(request, token)
-    with conn:
-        conn.execute("UPDATE requests SET status = ? WHERE user_id = ?", (req.status, req.user_id))
-        return {"status": "updated"}
+    await db.execute("UPDATE requests SET status = ? WHERE user_id = ?", (req.status, req.user_id))
+    await db.commit()
+    return {"status": "updated"}
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_html(request: Request):
@@ -516,6 +517,7 @@ async def show_faq(message: types.Message):
     await message.answer("Часто задаваемые вопросы пока не добавлены.", reply_markup=get_menu_kb(message.from_user.id))
 
 async def main():
+    await init_db()
     config = uvicorn.Config(app, host="0.0.0.0", port=8000, loop="asyncio", log_level="info")
     server = uvicorn.Server(config)
     api_task = asyncio.create_task(server.serve())
