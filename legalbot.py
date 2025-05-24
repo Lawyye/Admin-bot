@@ -22,6 +22,9 @@ if not ADMIN_CHAT_ID_ENV:
 ADMIN_CHAT_ID = int(ADMIN_CHAT_ID_ENV) 
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "secure-token-123")
 
+# Список ID администраторов
+ADMINS = {1899643695, 1980103568}
+
 bot = Bot(token=API_TOKEN) 
 dp = Dispatcher(storage=MemoryStorage()) 
 logging.basicConfig(level=logging.INFO)
@@ -45,7 +48,7 @@ class RequestForm(StatesGroup):
     phone = State() 
     message = State()
 
-# Динамическая клавиатура, чтобы показывать "Админ-панель" только админу
+# Динамическая клавиатура, чтобы показывать "Админ-панель" только администраторам
 def get_menu_kb(user_id: int):
     keyboard = [
         [KeyboardButton(text="Записаться на консультацию")],
@@ -53,7 +56,7 @@ def get_menu_kb(user_id: int):
         [KeyboardButton(text="Отправить документ")],
         [KeyboardButton(text="Контакты")]
     ]
-    if user_id == ADMIN_CHAT_ID:
+    if user_id in ADMINS:
         keyboard.append([KeyboardButton(text="Админ-панель")])
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
@@ -102,7 +105,7 @@ async def save_request(message: types.Message, state: FSMContext):
 
 @dp.message(lambda m: m.text == "Админ-панель")
 async def admin_panel(message: types.Message):
-    if message.from_user.id != ADMIN_CHAT_ID:
+    if message.from_user.id not in ADMINS:
         await message.answer("Доступ запрещён.")
         return
     admin_url = "https://web-production-bb98.up.railway.app/admin?token=secure-token-123"
