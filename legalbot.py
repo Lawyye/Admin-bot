@@ -3,10 +3,10 @@ import logging
 import sqlite3 
 import os
 
-from dotenv import load_dotenv  # <--- ДОБАВИЛ ЭТО
+from dotenv import load_dotenv
 
 # Загружаем переменные из .env файла
-load_dotenv()  # <--- ДОБАВИЛ ЭТО
+load_dotenv()
 
 from aiogram import Bot, Dispatcher, types 
 from aiogram.filters import CommandStart 
@@ -15,12 +15,11 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage 
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
-from fastapi import FastAPI, Request, HTTPException, status 
-from fastapi.responses import HTMLResponse 
+from fastapi import FastAPI, Request, HTTPException, status, Cookie
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel 
 import uvicorn
 
-# Теперь эти переменные читаются из .env
 API_TOKEN = os.getenv("API_TOKEN") 
 ADMIN_CHAT_ID_ENV = os.getenv("ADMIN_CHAT_ID") 
 if not ADMIN_CHAT_ID_ENV: 
@@ -28,13 +27,12 @@ if not ADMIN_CHAT_ID_ENV:
 ADMIN_CHAT_ID = int(ADMIN_CHAT_ID_ENV) 
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "secure-token-123")
 
-# Пример для логинов и паролей админов
+# Логины и пароли админов из .env
 ADMIN_LOGIN1 = os.getenv("ADMIN_LOGIN1")
 ADMIN_PASSWORD1 = os.getenv("ADMIN_PASSWORD1")
 ADMIN_LOGIN2 = os.getenv("ADMIN_LOGIN2")
 ADMIN_PASSWORD2 = os.getenv("ADMIN_PASSWORD2")
 
-# Список ID администраторов
 ADMINS = {1899643695, 1980103568}
 
 bot = Bot(token=API_TOKEN) 
@@ -60,7 +58,6 @@ class RequestForm(StatesGroup):
     phone = State() 
     message = State()
 
-# Динамическая клавиатура, чтобы показывать "Админ-панель" только администраторам
 def get_menu_kb(user_id: int):
     keyboard = [
         [KeyboardButton(text="Записаться на консультацию")],
@@ -120,7 +117,7 @@ async def admin_panel(message: types.Message):
     if message.from_user.id not in ADMINS:
         await message.answer("Доступ запрещён.")
         return
-    admin_url = "https://web-production-bb98.up.railway.app/admin?token=secure-token-123"
+    admin_url = "https://web-production-bb98.up.railway.app/admin"
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Перейти в админку", url=admin_url)]
     ])
@@ -136,18 +133,33 @@ class StatusRequest(BaseModel):
     user_id: int 
     status: str
 
-def authorize(request: Request): 
-    token = request.headers.get("Authorization") 
-    if token != f"Bearer {ADMIN_TOKEN}": 
+def check_admin_credentials(login: str, password: str) -> bool:
+    # Можно добавить больше логинов/паролей, если нужно
+    return (login == ADMIN_LOGIN1 and password == ADMIN_PASSWORD1) or \
+           (login == ADMIN_LOGIN2 and password == ADMIN_PASSWORD2)
+
+def authorize(request: Request, token_cookie: str = Cookie(None)):
+    # Проверка авторизации через cookie
+    if not token_cookie or token_cookie != ADMIN_TOKEN:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+@app.post("/api/login")
+async def api_login(form: dict):
+    login = form.get("login")
+    password = form.get("password")
+    if check_admin_credentials(login, password):
+        resp = JSONResponse({"status": "ok"})
+        resp.set_cookie("token_cookie", ADMIN_TOKEN, httponly=True, samesite="strict")
+        return resp
+    return JSONResponse({"status": "fail"}, status_code=401)
 
 @app.get("/") 
 async def root(): 
     return {"status": "ok"}
 
 @app.get("/api/requests") 
-async def get_requests(request: Request): 
-    authorize(request) 
+async def get_requests(request: Request, token_cookie: str = Cookie(None)): 
+    authorize(request, token_cookie)
     rows = conn.execute(
         "SELECT id, user_id, name, phone, message, created_at, status FROM requests ORDER BY created_at DESC"
     ).fetchall() 
@@ -165,8 +177,8 @@ async def get_requests(request: Request):
     ]
 
 @app.post("/api/reply")
-async def reply_user(req: ReplyRequest, request: Request):
-    authorize(request)
+async def reply_user(req: ReplyRequest, request: Request, token_cookie: str = Cookie(None)):
+    authorize(request, token_cookie)
     try:
         await bot.send_message(req.user_id, req.message)
         with conn:
@@ -179,8 +191,8 @@ async def reply_user(req: ReplyRequest, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/status") 
-async def update_status(req: StatusRequest, request: Request): 
-    authorize(request) 
+async def update_status(req: StatusRequest, request: Request, token_cookie: str = Cookie(None)): 
+    authorize(request, token_cookie)
     with conn: 
         conn.execute("UPDATE requests SET status = ? WHERE user_id = ?", (req.status, req.user_id)) 
         return {"status": "updated"}
@@ -205,7 +217,14 @@ async def admin_html(request: Request):
     </style>
 </head>
 <body>
-<div class="page">
+<div id="loginDiv" style="max-width:350px;margin:80px auto;display:none;">
+    <h3>Вход в админ-панель</h3>
+    <input id="loginInput" class="form-control mb-2" placeholder="Логин">
+    <input id="passwordInput" type="password" class="form-control mb-2" placeholder="Пароль">
+    <button id="loginBtn" class="btn btn-primary w-100">Войти</button>
+    <div id="loginError" style="color:red;margin-top:10px;display:none;">Неверный логин или пароль</div>
+</div>
+<div id="adminDiv" style="display:none;">
     <div class="container-xl">
         <div class="page-header d-print-none mt-4 mb-2">
             <h2 class="page-title">Заявки LegalBot</h2>
@@ -237,7 +256,40 @@ async def admin_html(request: Request):
         </div>
     </div>
 </div>
-<!-- ... HTML и JS-код админки ... -->
+<script>
+async function checkAuth() {
+    // Проверяем авторизацию
+    let res = await fetch('/api/requests');
+    if (res.status === 401) {
+        document.getElementById('loginDiv').style.display = '';
+        document.getElementById('adminDiv').style.display = 'none';
+    } else {
+        document.getElementById('loginDiv').style.display = 'none';
+        document.getElementById('adminDiv').style.display = '';
+        load();
+    }
+}
+document.getElementById('loginBtn').onclick = async function() {
+    const login = document.getElementById('loginInput').value;
+    const password = document.getElementById('passwordInput').value;
+    let res = await fetch('/api/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({login, password})
+    });
+    if (res.status === 200) {
+        document.getElementById('loginDiv').style.display = 'none';
+        document.getElementById('adminDiv').style.display = '';
+        document.getElementById('loginError').style.display = 'none';
+        load();
+    } else {
+        document.getElementById('loginError').style.display = '';
+    }
+};
+window.onload = checkAuth;
+
+// ... остальной JS-код таблицы заявок (оставь без изменений)
+</script>
 </body>
 </html>
 """
