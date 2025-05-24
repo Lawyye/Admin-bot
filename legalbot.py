@@ -93,9 +93,13 @@ async def save_request(message: types.Message, state: FSMContext):
 
 app = FastAPI()
 
-class ReplyRequest(BaseModel): user_id: int message: str
+class ReplyRequest(BaseModel): 
+    user_id: int 
+    message: str
 
-class StatusRequest(BaseModel): user_id: int status: str
+class StatusRequest(BaseModel): 
+    user_id: int 
+    status: str
 
 def authorize(request: Request): token = request.headers.get("Authorization") if token != f"Bearer {ADMIN_TOKEN}": raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
