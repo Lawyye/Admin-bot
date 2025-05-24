@@ -189,21 +189,21 @@ async def get_lang(state: FSMContext):
     data = await state.get_data()
     return data.get('lang', 'ru')
 
-@dp.message(CommandStart())
-async def start(message: types.Message, state: FSMContext):
-    # язык не выбран - предлагаем выбрать
-    data = await state.get_data()
-    if not data.get('lang'):
-        await state.set_state(RequestForm.language)
-        await message.answer(translations['ru']['choose_language'], reply_markup=get_lang_kb())
+@dp.message(CommandStart()) 
+async def start(message: types.Message, state: FSMContext): 
+    data = await state.get_data() 
+    if not data.get('lang'): 
+        await state.set_state(RequestForm.language)  # <- это обязательно! 
+        await message.answer(translations['ru']['choose_language'], reply_markup=get_lang_kb()) 
         return
-    lang = data['lang']
-    await bot.send_photo(
-        chat_id=message.chat.id,
-        photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
-        caption=translations[lang]['welcome'],
-        reply_markup=get_menu_kb(message.from_user.id, lang)
-    )
+
+lang = data['lang']
+await bot.send_photo(
+    chat_id=message.chat.id,
+    photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
+    caption=translations[lang]['welcome'],
+    reply_markup=get_menu_kb(message.from_user.id, lang)
+)
 
 @dp.message(RequestForm.language) 
 async def choose_lang(message: types.Message, state: FSMContext): 
@@ -213,14 +213,15 @@ async def choose_lang(message: types.Message, state: FSMContext):
     elif text == translations['en']['lang_en'].lower(): 
         lang = 'en' 
     else: 
-        await message.answer( "Пожалуйста, выберите язык кнопкой / Please choose language with button.", 
-            reply_markup=get_lang_kb() 
+        await message.answer( "Пожалуйста, выберите язык кнопкой / Please choose language with button.", reply_markup=get_lang_kb() 
         ) 
         return
 
     await state.update_data(lang=lang)
     await state.clear()  # сбрасываем FSM перед стартом
     await start(message, state)
+
+
 
     
         
