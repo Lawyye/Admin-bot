@@ -212,11 +212,14 @@ async def choose_lang(message: types.Message, state: FSMContext):
     elif message.text == translations['en']['lang_en']:
         lang = 'en'
     else:
-        await message.answer("Пожалуйста, выберите язык кнопкой / Please choose language with button.", reply_markup=get_lang_kb())
-        return 
-   await state.update_data(lang=lang)
-   await start(message, state)
-   await state.clear()
+        await message.answer(
+            "Пожалуйста, выберите язык кнопкой / Please choose language with button.",
+            reply_markup=get_lang_kb()
+        )
+        return
+    await state.update_data(lang=lang)
+    await start(message, state)
+    await state.clear()
         
 @dp.message(lambda m: m.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']])
 async def to_main_menu(message: types.Message, state: FSMContext):
