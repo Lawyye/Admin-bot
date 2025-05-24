@@ -25,8 +25,7 @@ ADMIN_CHAT_ID = int(ADMIN_CHAT_ID_ENV)
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "secure-token-123")
 
 bot = Bot(token=API_TOKEN) 
-dp = 
-Dispatcher(storage=MemoryStorage()) 
+dp = Dispatcher(storage=MemoryStorage()) 
 logging.basicConfig(level=logging.INFO)
 
 conn = sqlite3.connect("bot.db", check_same_thread=False) c = conn.cursor() c.execute("""CREATE TABLE IF NOT EXISTS requests ( id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT, phone TEXT, message TEXT, created_at TEXT, status TEXT DEFAULT 'new')""") conn.commit()
