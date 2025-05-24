@@ -1,8 +1,6 @@
 import asyncio 
 import logging 
 import sqlite3 
-import threading 
-from datetime import datetime 
 import os
 
 from aiogram import Bot, Dispatcher, types 
@@ -28,8 +26,7 @@ bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage()) 
 logging.basicConfig(level=logging.INFO)
 
-conn = sqlite3.connect("bot.db" ,
-check_same_thread=False) 
+conn = sqlite3.connect("bot.db", check_same_thread=False) 
 c = conn.cursor() 
 c.execute("""
     CREATE TABLE IF NOT EXISTS requests ( 
@@ -53,7 +50,7 @@ menu_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="Часто задаваемые вопросы")], 
         [KeyboardButton(text="Отправить документ")], 
         [KeyboardButton(text="Контакты")] ], 
-resize_keyboard=True )
+    resize_keyboard=True )
 
 @dp.message(CommandStart()) 
 async def start(message: types.Message): 
@@ -84,6 +81,7 @@ async def get_phone(message: types.Message, state: FSMContext):
 @dp.message(RequestForm.message) 
 async def save_request(message: types.Message, state: FSMContext): 
     data = await state.get_data() 
+    from datetime import datetime
     now = datetime.now().isoformat() 
     with conn: 
         conn.execute("INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)", (message.from_user.id, data['name'], data['phone'], message.text, now, 'new')) 
@@ -202,9 +200,14 @@ async def ask_document(message: types.Message):
 async def handle_document(message: types.Message): 
     await message.answer("Документ получен. Спасибо!")
 
-def run_web(): uvicorn.run(app, host="0.0.0.0", port=8000)
+async def main():
+    # Запускаем FastAPI (uvicorn) как фонового сервера
+    # и aiogram polling в том же event loop
+    config = uvicorn.Config(app, host="0.0.0.0", port=8000, loop="asyncio", log_level="info")
+    server = uvicorn.Server(config)
+    api_task = asyncio.create_task(server.serve())
+    bot_task = asyncio.create_task(dp.start_polling(bot))
+    await asyncio.gather(api_task, bot_task)
 
 if __name__ == "__main__":
-    threading.Thread(target=run_web, daemon=True).start()
-    asyncio.run(dp.start_polling(bot))
-
+    asyncio.run(main())
