@@ -1,8 +1,21 @@
-import asyncio import logging import sqlite3 import threading from datetime import datetime import os
+import asyncio 
+import logging 
+import sqlite3 
+import threading 
+from datetime import datetime 
+import os
 
-from aiogram import Bot, Dispatcher, types from aiogram.filters import CommandStart from aiogram.fsm.context import FSMContext from aiogram.fsm.state import StatesGroup, State from aiogram.fsm.storage.memory import MemoryStorage from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram import Bot, Dispatcher, types 
+from aiogram.filters import CommandStart 
+from aiogram.fsm.context import FSMContext 
+from aiogram.fsm.state import StatesGroup, State 
+from aiogram.fsm.storage.memory import MemoryStorage 
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-from fastapi import FastAPI, Request, HTTPException, status from fastapi.responses import HTMLResponse from pydantic import BaseModel import uvicorn
+from fastapi import FastAPI, Request, HTTPException, status 
+from fastapi.responses import HTMLResponse 
+from pydantic import BaseModel 
+import uvicorn
 
 API_TOKEN = os.getenv("API_TOKEN") ADMIN_CHAT_ID_ENV = os.getenv("ADMIN_CHAT_ID") if not ADMIN_CHAT_ID_ENV: raise ValueError("ADMIN_CHAT_ID is not set") ADMIN_CHAT_ID = int(ADMIN_CHAT_ID_ENV) ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "secure-token-123")
 
