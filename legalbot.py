@@ -200,7 +200,7 @@ async def admin_html(request: Request):
 </div>
 
 <!-- Модалка для ответа -->
-<div class="modal modal-blur fade" id="replyModal" tabindex="-1" style="display:none;" aria-hidden="true">
+<div class="modal modal-blur fade" id="replyModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title">Ответ пользователю</h5></div>
@@ -215,7 +215,7 @@ async def admin_html(request: Request):
   </div>
 </div>
 <!-- Модалка для смены статуса -->
-<div class="modal modal-blur fade" id="statusModal" tabindex="-1" style="display:none;" aria-hidden="true">
+<div class="modal modal-blur fade" id="statusModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title">Сменить статус</h5></div>
@@ -328,11 +328,11 @@ document.querySelectorAll("#reqTable th[data-sort]").forEach(th => {
 function openReplyModal(userId) {
     replyUserId = userId;
     document.getElementById("replyMsg").value = "";
-    document.getElementById("replyModal").style.display = "block";
-    document.getElementById("replyMsg").focus();
+    window.Tabler.Modal.getOrCreate(document.getElementById("replyModal")).show();
+    setTimeout(() => document.getElementById("replyMsg").focus(), 200);
 }
 function closeReplyModal() {
-    document.getElementById("replyModal").style.display = "none";
+    window.Tabler.Modal.getOrCreate(document.getElementById("replyModal")).hide();
 }
 document.getElementById("replySendBtn").onclick = async function() {
     const msg = document.getElementById("replyMsg").value;
@@ -351,10 +351,10 @@ document.getElementById("replySendBtn").onclick = async function() {
 function openStatusModal(userId, currentStatus) {
     statusUserId = userId;
     document.getElementById("newStatus").value = currentStatus || "new";
-    document.getElementById("statusModal").style.display = "block";
+    window.Tabler.Modal.getOrCreate(document.getElementById("statusModal")).show();
 }
 function closeStatusModal() {
-    document.getElementById("statusModal").style.display = "none";
+    window.Tabler.Modal.getOrCreate(document.getElementById("statusModal")).hide();
 }
 document.getElementById("statusSendBtn").onclick = async function() {
     const status = document.getElementById("newStatus").value;
@@ -406,4 +406,4 @@ async def main():
     await asyncio.gather(api_task, bot_task)
 
 if __name__ == "__main__":
-    asyncio.run(main())        
+    asyncio.run(main())
