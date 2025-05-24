@@ -198,9 +198,10 @@ async def start(message: types.Message, state: FSMContext):
 lang = data['lang']
 await bot.send_photo(
     chat_id=message.chat.id,
-    photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
+    
+photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
     caption=translations[lang]['welcome'],
-    reply_markup=get_menu_kb(message.from_user.id, lang)
+reply_markup=get_menu_kb(message.from_user.id, lang)
 )
 
 @dp.message(RequestForm.language) 
