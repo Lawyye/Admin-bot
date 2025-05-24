@@ -63,13 +63,33 @@ async def start(message: types.Message):
 async def contacts(message: types.Message): 
     await message.answer("г. Астрахань, ул. Татищева 20\n+7 988 600 56 61")
 
-@dp.message(lambda m: m.text == "Записаться на консультацию") async def consultation(message: types.Message, state: FSMContext): await state.set_state(RequestForm.name) await state.update_data(user_id=message.from_user.id) await message.answer("Введите ваше имя:")
+@dp.message(lambda m: m.text == "Записаться на консультацию") 
+async def consultation(message: types.Message, state: FSMContext): 
+    await state.set_state(RequestForm.name) 
+    await state.update_data(user_id=message.from_user.id) 
+    await message.answer("Введите ваше имя:")
 
-@dp.message(RequestForm.name) async def get_name(message: types.Message, state: FSMContext): await state.update_data(name=message.text) await state.set_state(RequestForm.phone) await message.answer("Введите номер телефона:")
+@dp.message(RequestForm.name) 
+async def get_name(message: types.Message, state: FSMContext): 
+    await state.update_data(name=message.text) 
+    await state.set_state(RequestForm.phone) 
+    await message.answer("Введите номер телефона:")
 
-@dp.message(RequestForm.phone) async def get_phone(message: types.Message, state: FSMContext): await state.update_data(phone=message.text) await state.set_state(RequestForm.message) await message.answer("Опишите вашу проблему:")
+@dp.message(RequestForm.phone) 
+async def get_phone(message: types.Message, state: FSMContext): 
+    await state.update_data(phone=message.text) 
+    await state.set_state(RequestForm.message) 
+    await message.answer("Опишите вашу проблему:")
 
-@dp.message(RequestForm.message) async def save_request(message: types.Message, state: FSMContext): data = await state.get_data() now = datetime.now().isoformat() with conn: conn.execute("INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)", (message.from_user.id, data['name'], data['phone'], message.text, now, 'new')) await bot.send_message(ADMIN_CHAT_ID, f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {message.text}") await message.answer("Спасибо! Мы свяжемся с вами.", reply_markup=menu_kb) await state.clear()
+@dp.message(RequestForm.message) 
+async def save_request(message: types.Message, state: FSMContext): 
+    data = await state.get_data() 
+    now = datetime.now().isoformat() 
+    with conn: 
+        conn.execute("INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)", (message.from_user.id, data['name'], data['phone'], message.text, now, 'new')) 
+        await bot.send_message(ADMIN_CHAT_ID, f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {message.text}") 
+        await message.answer("Спасибо! Мы свяжемся с вами.", reply_markup=menu_kb) 
+        await state.clear()
 
 app = FastAPI()
 
