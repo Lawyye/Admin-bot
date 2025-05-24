@@ -219,7 +219,6 @@ async def choose_lang(message: types.Message, state: FSMContext):
         return
     await state.update_data(lang=lang)
     await start(message, state)
-    await state.clear()
         
 @dp.message(lambda m: m.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']])
 async def to_main_menu(message: types.Message, state: FSMContext):
