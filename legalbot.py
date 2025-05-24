@@ -189,48 +189,40 @@ async def get_lang(state: FSMContext):
 
 @dp.message(CommandStart()) 
 async def start(message: types.Message, state: FSMContext): 
-    data = await state.get_data() 
-    if not data.get('lang'): 
-        await state.set_state(RequestForm.language)
-        await message.answer(translations['ru']['choose_language'], reply_markup=get_lang_kb())
-        return
+   data = await state.get_data() 
+   if not data.get('lang'): 
+       await state.set_state(RequestForm.language) 
+       await message.answer(translations['ru']['choose_language'], reply_markup=get_lang_kb()) 
+       return
 
-    lang = data['lang']
-    await bot.send_photo(
-        chat_id=message.chat.id,
-        photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
-        caption=translations[lang]['welcome'],
-        reply_markup=get_menu_kb(message.from_user.id, lang)
-    )
+lang = data['lang']
+await bot.send_photo(
+    chat_id=message.chat.id,
+    photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
+    caption=translations[lang]['welcome'],
+    reply_markup=get_menu_kb(message.from_user.id, lang)
+)
 
-@dp.message(RequestForm.language)
-async def choose_lang(message: types.Message, state: FSMContext):
-    text = message.text.strip().lower()
-    if text == translations['ru']['lang_ru'].lower():
-        lang = 'ru'
-    elif text == translations['en']['lang_en'].lower():
-        lang = 'en'
-    else:
-        await message.answer(
-            "Пожалуйста, выберите язык кнопкой / Please choose language with button.",
-            reply_markup=get_lang_kb()
-        )
+@dp.message(RequestForm.language) 
+async def choose_lang(message: types.Message, state: FSMContext): 
+    logging.info(f"LANG SELECTED: {message.text}") 
+    text = message.text.strip().lower() 
+    if text == translations['ru']['lang_ru'].lower(): 
+        lang = 'ru' 
+    elif text == translations['en']['lang_en'].lower(): 
+        lang = 'en' 
+    else: 
+        await message.answer( 
+            "Пожалуйста, выберите язык кнопкой / Please choose language with button.", 
+            reply_markup=get_lang_kb() 
+        ) 
         return
 
     await state.update_data(lang=lang)
-    await state.clear()
     await start(message, state)
-
-@dp.message(lambda m: m.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']])
-async def to_main_menu(message: types.Message, state: FSMContext):
-    lang = await get_lang(state)
     await state.clear()
-    await bot.send_photo(
-        chat_id=message.chat.id,
-        photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
-        caption=translations[lang]['welcome'],
-        reply_markup=get_menu_kb(message.from_user.id, lang)
-    )
+
+
 
 @dp.message(lambda m: m.text == translations['ru']['contacts_button'] or m.text == translations['en']['contacts_button'])
 async def contacts(message: types.Message, state: FSMContext):
