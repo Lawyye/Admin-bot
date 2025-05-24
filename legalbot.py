@@ -198,5 +198,7 @@ async def handle_document(message: types.Message):
 
 def run_web(): uvicorn.run(app, host="0.0.0.0", port=8000)
 
-if name == "main": threading.Thread(target=run_web, daemon=True).start() asyncio.run(dp.start_polling(bot))
+if name == "main": 
+    threading.Thread(target=run_web, daemon=True).start() 
+    asyncio.run(dp.start_polling(bot))
 
