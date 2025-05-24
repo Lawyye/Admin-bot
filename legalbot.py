@@ -201,7 +201,8 @@ async def get_documents(request: Request):
 
 @app.get("/api/download/{file_id}")
 async def download_document(file_id: str, request: Request):
-    token = request.headers.get("X-Admin-Token")
+    # Accept token from header or from query param
+    token = request.headers.get("X-Admin-Token") or request.query_params.get("token")
     authorize(request, token)
     url = f"https://api.telegram.org/bot{API_TOKEN}/getFile?file_id={file_id}"
     import requests
@@ -269,6 +270,7 @@ async def admin_html(request: Request):
     <div class="container-xl">
         <div class="page-header d-print-none mt-4 mb-2">
             <h2 class="page-title">Заявки LegalBot</h2>
+            <button id="logoutBtn" class="btn btn-outline-danger float-end">Выйти</button>
         </div>
         <div class="filter-row">
             <input type="search" class="form-control" id="searchInput" placeholder="Поиск по имени или сообщению">
@@ -340,6 +342,12 @@ document.getElementById('loginBtn').onclick = async function() {
     }
 };
 
+document.getElementById('logoutBtn').onclick = function() {
+    adminToken = null;
+    document.getElementById('adminDiv').style.display = 'none';
+    document.getElementById('loginDiv').style.display = '';
+};
+
 window.onload = checkAuth;
 
 // Функция для защищённых API-запросов
@@ -352,42 +360,50 @@ async function apiFetch(url, options = {}) {
 async function load() {
     document.getElementById('loader').style.display = "";
     document.getElementById('tableDiv').style.display = "none";
-    const res = await apiFetch('/api/requests');
-    if(res.status !== 200) {
+    try {
+        const res = await apiFetch('/api/requests');
+        if(res.status !== 200) {
+            throw new Error('Ошибка запроса, авторизация истекла');
+        }
+        let allData = await res.json();
+        let tBody = document.getElementById('reqTbody');
+        tBody.innerHTML = '';
+        for(const r of allData) {
+            tBody.innerHTML += `<tr>
+                <td>${r.name}</td>
+                <td>${r.phone}</td>
+                <td>${r.created_at}</td>
+                <td>${r.message}</td>
+                <td>${r.status}</td>
+                <td></td>
+            </tr>`;
+        }
+        document.getElementById('loader').style.display = "none";
+        document.getElementById('tableDiv').style.display = "";
+    } catch(e) {
+        alert(e.message || 'Ошибка загрузки заявок');
         checkAuth();
-        return;
     }
-    let allData = await res.json();
-    // Пример: просто отрисуй количество заявок
-    let tBody = document.getElementById('reqTbody');
-    tBody.innerHTML = '';
-    for(const r of allData) {
-        tBody.innerHTML += `<tr>
-            <td>${r.name}</td>
-            <td>${r.phone}</td>
-            <td>${r.created_at}</td>
-            <td>${r.message}</td>
-            <td>${r.status}</td>
-            <td></td>
-        </tr>`;
-    }
-    document.getElementById('loader').style.display = "none";
-    document.getElementById('tableDiv').style.display = "";
 }
 
 async function loadDocuments() {
-    const res = await apiFetch('/api/documents');
-    if(res.status !== 200) return;
-    const docs = await res.json();
-    let tBody = document.getElementById('docTbody');
-    tBody.innerHTML = '';
-    for(const doc of docs) {
-        tBody.innerHTML += `<tr>
-            <td>${doc.user_id}</td>
-            <td>${doc.file_name}</td>
-            <td>${doc.sent_at}</td>
-            <td><a href="/api/download/${doc.file_id}" target="_blank" onclick="return adminToken ? (this.href += '?token=' + adminToken) : false;">Скачать</a></td>
-        </tr>`;
+    try {
+        const res = await apiFetch('/api/documents');
+        if(res.status !== 200) throw new Error('Ошибка загрузки документов');
+        const docs = await res.json();
+        let tBody = document.getElementById('docTbody');
+        tBody.innerHTML = '';
+        for(const doc of docs) {
+            tBody.innerHTML += `<tr>
+                <td>${doc.user_id}</td>
+                <td>${doc.file_name}</td>
+                <td>${doc.sent_at}</td>
+                <td><a href="/api/download/${doc.file_id}?token=${encodeURIComponent(adminToken)}" target="_blank">Скачать</a></td>
+            </tr>`;
+        }
+    } catch(e) {
+        alert(e.message || 'Ошибка загрузки документов');
+        checkAuth();
     }
 }
 </script>
