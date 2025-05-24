@@ -102,21 +102,49 @@ class StatusRequest(BaseModel):
     status: str
 
 def authorize(request: Request): 
-    token = 
-request.headers.get("Authorization") 
-    if token != f"Bearer 
-{ADMIN_TOKEN}": raise 
-HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    token = request.headers.get("Authorization") 
+    if token != f"Bearer {ADMIN_TOKEN}": 
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-@app.get("/") async def root(): return {"status": "ok"}
+@app.get("/") 
+async def root(): 
+    return {"status": "ok"}
 
-@app.get("/api/requests") async def get_requests(request: Request): authorize(request) rows = conn.execute("SELECT id, user_id, name, phone, message, created_at, status FROM requests ORDER BY created_at DESC").fetchall() return [{"id": r[0], "user_id": r[1], "name": r[2], "phone": r[3], "message": r[4], "created_at": r[5], "status": r[6]} for r in rows]
+@app.get("/api/requests") 
+async def get_requests(request: Request): 
+    authorize(request) 
+    rows = conn.execute("SELECT id, user_id, name, phone, message, created_at, status FROM requests ORDER BY created_at DESC").fetchall() 
+    return [
+        {
+            "id": r[0], 
+            "user_id": r[1], 
+            "name": r[2], 
+            "phone": r[3], 
+            "message": r[4], 
+            "created_at": r[5], 
+            "status": r[6]
+        } 
+        for r in rows
+    ]
 
-@app.post("/api/reply") async def reply_user(req: ReplyRequest, request: Request): authorize(request) await bot.send_message(req.user_id, req.message) with conn: conn.execute("UPDATE requests SET status = 'done' WHERE user_id = ?", (req.user_id,)) return {"status": "sent"}
+@app.post("/api/reply") 
+async def reply_user(req: ReplyRequest, request: Request): 
+    authorize(request) 
+    await bot.send_message(req.user_id, req.message) 
+    with conn: 
+        conn.execute("UPDATE requests SET status = 'done' WHERE user_id = ?", (req.user_id,)) 
+        return {"status": "sent"}
 
-@app.post("/api/status") async def update_status(req: StatusRequest, request: Request): authorize(request) with conn: conn.execute("UPDATE requests SET status = ? WHERE user_id = ?", (req.status, req.user_id)) return {"status": "updated"}
+@app.post("/api/status") 
+async def update_status(req: StatusRequest, request: Request): 
+    authorize(request) 
+    with conn: 
+        conn.execute("UPDATE requests SET status = ? WHERE user_id = ?", (req.status, req.user_id)) 
+        return {"status": "updated"}
 
-@app.get("/admin", response_class=HTMLResponse) async def admin_html(request: Request): return """ <html> <head> <style> body { font-family: Arial, sans-serif; padding: 20px; } h2 { color: #333; } li { margin-bottom: 15px; } button { margin: 2px; } </style> </head> <body> <h2>LegalBot Admin</h2> <script> const token = prompt("Введите токен для доступа:"); async function sendReply(userId) { const msg = prompt("Ответ пользователю:"); if (msg) { await fetch('/api/reply', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ user_id: userId, message: msg }) }); alert("Ответ отправлен!"); location.reload(); } }
+@app.get("/admin", response_class=HTMLResponse) 
+async def admin_html(request: Request): 
+    return """ <html> <head> <style> body { font-family: Arial, sans-serif; padding: 20px; } h2 { color: #333; } li { margin-bottom: 15px; } button { margin: 2px; } </style> </head> <body> <h2>LegalBot Admin</h2> <script> const token = prompt("Введите токен для доступа:"); async function sendReply(userId) { const msg = prompt("Ответ пользователю:"); if (msg) { await fetch('/api/reply', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ user_id: userId, message: msg }) }); alert("Ответ отправлен!"); location.reload(); } }
 
 async function setStatus(userId) {
     const status = prompt("Новый статус (new/in_work/done):");
