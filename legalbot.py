@@ -456,7 +456,14 @@ async function load() {
                 <td>${formatDatetime(r.created_at)}</td>
                 <td>${r.status}</td>
                 <td>${docsHtml}</td>
-                <td></td>
+                <td>
+                  <button class="btn btn-sm btn-success" onclick="replyUser(${r.user_id}, '${(r.name ?? '').replace(/'/g,'&#39;')}')">Ответить</button>
+                  <select class="form-select form-select-sm d-inline-block w-auto" onchange="changeStatus(${r.user_id}, this.value)">
+                    <option value="new" ${r.status === 'new' ? 'selected' : ''}>new</option>
+                    <option value="in_work" ${r.status === 'in_work' ? 'selected' : ''}>in_work</option>
+                    <option value="done" ${r.status === 'done' ? 'selected' : ''}>done</option>
+                  </select>
+                </td>
             </tr>`;
         }
         document.getElementById('loader').style.display = "none";
@@ -465,6 +472,39 @@ async function load() {
         alert(e.message || 'Ошибка загрузки заявок');
         checkAuth();
     }
+}
+
+function replyUser(userId, userName) {
+    const msg = prompt(`Введите ответ для пользователя ${userName} (id=${userId}):`);
+    if (msg) {
+        apiFetch('/api/reply', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({user_id: userId, message: msg})
+        }).then(res => {
+            if (res.status === 200) {
+                alert('Ответ отправлен!');
+                load();
+            } else {
+                alert('Не удалось отправить ответ');
+            }
+        });
+    }
+}
+
+function changeStatus(userId, status) {
+    apiFetch('/api/status', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: userId, status: status})
+    }).then(res => {
+        if (res.status === 200) {
+            alert('Статус обновлен!');
+            load();
+        } else {
+            alert('Ошибка при обновлении статуса');
+        }
+    });
 }
 </script>
 </body>
