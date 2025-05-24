@@ -202,3 +202,4 @@ if name == "main":
     threading.Thread(target=run_web, daemon=True).start() 
     asyncio.run(dp.start_polling(bot))
 
+
