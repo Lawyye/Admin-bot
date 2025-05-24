@@ -42,7 +42,10 @@ c.execute("""
         status TEXT DEFAULT 'new')""") 
 conn.commit()
 
-class RequestForm(StatesGroup): name = State() phone = State() message = State()
+class RequestForm(StatesGroup): 
+    name = State() 
+    phone = State() 
+    message = State()
 
 menu_kb = ReplyKeyboardMarkup( keyboard=[ [KeyboardButton(text="Записаться на консультацию")], [KeyboardButton(text="Часто задаваемые вопросы")], [KeyboardButton(text="Отправить документ")], [KeyboardButton(text="Контакты")] ], resize_keyboard=True )
 
