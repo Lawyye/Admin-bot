@@ -18,14 +18,11 @@ from pydantic import BaseModel
 import uvicorn
 
 API_TOKEN = os.getenv("API_TOKEN") 
-ADMIN_CHAT_ID_ENV = 
-os.getenv("ADMIN_CHAT_ID") 
+ADMIN_CHAT_ID_ENV = os.getenv("ADMIN_CHAT_ID") 
 if not ADMIN_CHAT_ID_ENV: 
     raise ValueError("ADMIN_CHAT_ID is not set")
-ADMIN_CHAT_ID = 
-int(ADMIN_CHAT_ID_ENV) 
-ADMIN_TOKEN = 
-os.getenv("ADMIN_TOKEN", "secure-token-123")
+ADMIN_CHAT_ID = int(ADMIN_CHAT_ID_ENV) 
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "secure-token-123")
 
 bot = Bot(token=API_TOKEN) dp = Dispatcher(storage=MemoryStorage()) logging.basicConfig(level=logging.INFO)
 
