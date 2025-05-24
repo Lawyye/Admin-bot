@@ -205,20 +205,24 @@ async def start(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(message.from_user.id, lang)
     )
 
-@dp.message(RequestForm.language)
-async def choose_lang(message: types.Message, state: FSMContext):
-    if message.text == translations['ru']['lang_ru']:
-        lang = 'ru'
-    elif message.text == translations['en']['lang_en']:
-        lang = 'en'
-    else:
-        await message.answer(
-            "Пожалуйста, выберите язык кнопкой / Please choose language with button.",
-            reply_markup=get_lang_kb()
-        )
+@dp.message(RequestForm.language) 
+async def choose_lang(message: types.Message, state: FSMContext): 
+    text = message.text.strip().lower() 
+    if text == translations['ru']['lang_ru'].lower(): 
+        lang = 'ru' 
+    elif text == translations['en']['lang_en'].lower(): 
+        lang = 'en' 
+    else: 
+        await message.answer( "Пожалуйста, выберите язык кнопкой / Please choose language with button.", 
+            reply_markup=get_lang_kb() 
+        ) 
         return
+
     await state.update_data(lang=lang)
+    await state.clear()  # сбрасываем FSM перед стартом
     await start(message, state)
+
+    
         
 @dp.message(lambda m: m.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']])
 async def to_main_menu(message: types.Message, state: FSMContext):
