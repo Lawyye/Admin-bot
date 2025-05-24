@@ -49,7 +49,10 @@ class RequestForm(StatesGroup):
 
 menu_kb = ReplyKeyboardMarkup( keyboard=[ [KeyboardButton(text="Записаться на консультацию")], [KeyboardButton(text="Часто задаваемые вопросы")], [KeyboardButton(text="Отправить документ")], [KeyboardButton(text="Контакты")] ], resize_keyboard=True )
 
-@dp.message(CommandStart()) async def start(message: types.Message): await message.answer("Добро пожаловать в LegalBot!", reply_markup=menu_kb)
+@dp.message(CommandStart()) 
+async def start(message: types.Message): 
+    await message.answer("Добро пожаловать в LegalBot!", 
+reply_markup=menu_kb)
 
 @dp.message(lambda m: m.text == "Контакты") async def contacts(message: types.Message): await message.answer("г. Астрахань, ул. Татищева 20\n+7 988 600 56 61")
 
