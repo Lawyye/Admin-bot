@@ -28,7 +28,7 @@ bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage()) 
 logging.basicConfig(level=logging.INFO)
 
-conn = sqlite3.connect("bot.db" 
+conn = sqlite3.connect("bot.db" ,
 check_same_thread=False) 
 c = conn.cursor() 
 c.execute("""
