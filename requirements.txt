@@ -4,3 +4,4 @@ uvicorn
 python-dotenv
 aiosqlite
 pydantic
+requests
