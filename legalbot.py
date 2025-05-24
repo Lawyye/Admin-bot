@@ -234,6 +234,8 @@ async def admin_html(request: Request):
   </div>
 </div>
 
+<!-- Bootstrap JS (ОБЯЗАТЕЛЬНО!) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <!-- Tabler JS -->
 <script src="https://unpkg.com/@tabler/core@latest/dist/js/tabler.min.js"></script>
 <script>
@@ -248,6 +250,10 @@ let sortField = "created_at", sortAsc = false;
 let filterStatus = "", searchValue = "";
 let replyUserId = null, statusUserId = null;
 
+// --- Bootstrap modal instances ---
+let replyModalInstance = null;
+let statusModalInstance = null;
+
 function statusBadge(status) {
     if (status === "done")   return '<span class="badge bg-success">Готово</span>';
     if (status === "in_work")return '<span class="badge bg-warning text-dark">В работе</span>';
@@ -261,7 +267,7 @@ function renderTable() {
     if (searchValue) {
         const v = searchValue.toLowerCase();
         data = data.filter(r => (r.name && r.name.toLowerCase().includes(v))
-                             || (r.message && r.message.toLowerCase().includes(v)));
+                        || (r.message && r.message.toLowerCase().includes(v)));
     }
     // Сортировка
     data.sort((a, b) => {
@@ -328,11 +334,13 @@ document.querySelectorAll("#reqTable th[data-sort]").forEach(th => {
 function openReplyModal(userId) {
     replyUserId = userId;
     document.getElementById("replyMsg").value = "";
-    window.Tabler.Modal.getOrCreate(document.getElementById("replyModal")).show();
+    let elem = document.getElementById("replyModal");
+    replyModalInstance = bootstrap.Modal.getOrCreateInstance(elem);
+    replyModalInstance.show();
     setTimeout(() => document.getElementById("replyMsg").focus(), 200);
 }
 function closeReplyModal() {
-    window.Tabler.Modal.getOrCreate(document.getElementById("replyModal")).hide();
+    if(replyModalInstance) replyModalInstance.hide();
 }
 document.getElementById("replySendBtn").onclick = async function() {
     const msg = document.getElementById("replyMsg").value;
@@ -351,10 +359,12 @@ document.getElementById("replySendBtn").onclick = async function() {
 function openStatusModal(userId, currentStatus) {
     statusUserId = userId;
     document.getElementById("newStatus").value = currentStatus || "new";
-    window.Tabler.Modal.getOrCreate(document.getElementById("statusModal")).show();
+    let elem = document.getElementById("statusModal");
+    statusModalInstance = bootstrap.Modal.getOrCreateInstance(elem);
+    statusModalInstance.show();
 }
 function closeStatusModal() {
-    window.Tabler.Modal.getOrCreate(document.getElementById("statusModal")).hide();
+    if(statusModalInstance) statusModalInstance.hide();
 }
 document.getElementById("statusSendBtn").onclick = async function() {
     const status = document.getElementById("newStatus").value;
