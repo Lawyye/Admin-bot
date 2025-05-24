@@ -1,6 +1,6 @@
-import asyncio 
-import logging 
-import sqlite3 
+import asyncio
+import logging
+import sqlite3
 import os
 
 from dotenv import load_dotenv
@@ -8,23 +8,23 @@ from dotenv import load_dotenv
 # Загружаем переменные из .env файла
 load_dotenv()
 
-from aiogram import Bot, Dispatcher, types 
-from aiogram.filters import CommandStart 
-from aiogram.fsm.context import FSMContext 
-from aiogram.fsm.state import StatesGroup, State 
-from aiogram.fsm.storage.memory import MemoryStorage 
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import CommandStart
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 from fastapi import FastAPI, Request, HTTPException, status
-from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel 
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from pydantic import BaseModel
 import uvicorn
 
-API_TOKEN = os.getenv("API_TOKEN") 
-ADMIN_CHAT_ID_ENV = os.getenv("ADMIN_CHAT_ID") 
-if not ADMIN_CHAT_ID_ENV: 
+API_TOKEN = os.getenv("API_TOKEN")
+ADMIN_CHAT_ID_ENV = os.getenv("ADMIN_CHAT_ID")
+if not ADMIN_CHAT_ID_ENV:
     raise ValueError("ADMIN_CHAT_ID is not set")
-ADMIN_CHAT_ID = int(ADMIN_CHAT_ID_ENV) 
+ADMIN_CHAT_ID = int(ADMIN_CHAT_ID_ENV)
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "secure-token-123")
 
 # Логины и пароли админов из .env
@@ -35,27 +35,35 @@ ADMIN_PASSWORD2 = os.getenv("ADMIN_PASSWORD2")
 
 ADMINS = {1899643695, 1980103568}
 
-bot = Bot(token=API_TOKEN) 
-dp = Dispatcher(storage=MemoryStorage()) 
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
 logging.basicConfig(level=logging.INFO)
 
-conn = sqlite3.connect("bot.db", check_same_thread=False) 
-c = conn.cursor() 
+conn = sqlite3.connect("bot.db", check_same_thread=False)
+c = conn.cursor()
 c.execute("""
-    CREATE TABLE IF NOT EXISTS requests ( 
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        user_id INTEGER, 
-        name TEXT, 
-        phone TEXT, 
-        message TEXT, 
-        created_at TEXT, 
+    CREATE TABLE IF NOT EXISTS requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        name TEXT,
+        phone TEXT,
+        message TEXT,
+        created_at TEXT,
         status TEXT DEFAULT 'new'
-    )""") 
+    )""")
+c.execute("""
+    CREATE TABLE IF NOT EXISTS documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        file_id TEXT,
+        file_name TEXT,
+        sent_at TEXT
+    )""")
 conn.commit()
 
-class RequestForm(StatesGroup): 
-    name = State() 
-    phone = State() 
+class RequestForm(StatesGroup):
+    name = State()
+    phone = State()
     message = State()
 
 def get_menu_kb(user_id: int):
@@ -69,47 +77,47 @@ def get_menu_kb(user_id: int):
         keyboard.append([KeyboardButton(text="Админ-панель")])
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
-@dp.message(CommandStart()) 
-async def start(message: types.Message): 
+@dp.message(CommandStart())
+async def start(message: types.Message):
     await message.answer("Добро пожаловать в LegalBot!", reply_markup=get_menu_kb(message.from_user.id))
 
-@dp.message(lambda m: m.text == "Контакты") 
-async def contacts(message: types.Message): 
+@dp.message(lambda m: m.text == "Контакты")
+async def contacts(message: types.Message):
     await message.answer("г. Астрахань, ул. Татищева 20\n+7 988 600 56 61", reply_markup=get_menu_kb(message.from_user.id))
 
-@dp.message(lambda m: m.text == "Записаться на консультацию") 
-async def consultation(message: types.Message, state: FSMContext): 
-    await state.set_state(RequestForm.name) 
-    await state.update_data(user_id=message.from_user.id) 
+@dp.message(lambda m: m.text == "Записаться на консультацию")
+async def consultation(message: types.Message, state: FSMContext):
+    await state.set_state(RequestForm.name)
+    await state.update_data(user_id=message.from_user.id)
     await message.answer("Введите ваше имя:", reply_markup=get_menu_kb(message.from_user.id))
 
-@dp.message(RequestForm.name) 
-async def get_name(message: types.Message, state: FSMContext): 
-    await state.update_data(name=message.text) 
-    await state.set_state(RequestForm.phone) 
+@dp.message(RequestForm.name)
+async def get_name(message: types.Message, state: FSMContext):
+    await state.update_data(name=message.text)
+    await state.set_state(RequestForm.phone)
     await message.answer("Введите номер телефона:", reply_markup=get_menu_kb(message.from_user.id))
 
-@dp.message(RequestForm.phone) 
-async def get_phone(message: types.Message, state: FSMContext): 
-    await state.update_data(phone=message.text) 
-    await state.set_state(RequestForm.message) 
+@dp.message(RequestForm.phone)
+async def get_phone(message: types.Message, state: FSMContext):
+    await state.update_data(phone=message.text)
+    await state.set_state(RequestForm.message)
     await message.answer("Опишите вашу проблему:", reply_markup=get_menu_kb(message.from_user.id))
 
-@dp.message(RequestForm.message) 
-async def save_request(message: types.Message, state: FSMContext): 
-    data = await state.get_data() 
+@dp.message(RequestForm.message)
+async def save_request(message: types.Message, state: FSMContext):
+    data = await state.get_data()
     from datetime import datetime
-    now = datetime.now().isoformat() 
-    with conn: 
+    now = datetime.now().isoformat()
+    with conn:
         conn.execute(
-            "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)", 
+            "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)",
             (message.from_user.id, data['name'], data['phone'], message.text, now, 'new')
-        ) 
+        )
         await bot.send_message(
-            ADMIN_CHAT_ID, 
+            ADMIN_CHAT_ID,
             f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {message.text}"
-        ) 
-        await message.answer("Спасибо! Мы свяжемся с вами.", reply_markup=get_menu_kb(message.from_user.id)) 
+        )
+        await message.answer("Спасибо! Мы свяжемся с вами.", reply_markup=get_menu_kb(message.from_user.id))
         await state.clear()
 
 @dp.message(lambda m: m.text == "Админ-панель")
@@ -125,12 +133,12 @@ async def admin_panel(message: types.Message):
 
 app = FastAPI()
 
-class ReplyRequest(BaseModel): 
-    user_id: int 
+class ReplyRequest(BaseModel):
+    user_id: int
     message: str
 
-class StatusRequest(BaseModel): 
-    user_id: int 
+class StatusRequest(BaseModel):
+    user_id: int
     status: str
 
 def check_admin_credentials(login: str, password: str) -> bool:
@@ -149,29 +157,64 @@ async def api_login(form: dict):
         return JSONResponse({"status": "ok", "token": ADMIN_TOKEN})
     return JSONResponse({"status": "fail"}, status_code=401)
 
-@app.get("/") 
-async def root(): 
+@app.get("/")
+async def root():
     return {"status": "ok"}
 
-@app.get("/api/requests") 
+@app.get("/api/requests")
 async def get_requests(request: Request):
     token = request.headers.get("X-Admin-Token")
     authorize(request, token)
     rows = conn.execute(
         "SELECT id, user_id, name, phone, message, created_at, status FROM requests ORDER BY created_at DESC"
-    ).fetchall() 
+    ).fetchall()
     return [
         {
-            "id": r[0], 
-            "user_id": r[1], 
-            "name": r[2], 
-            "phone": r[3], 
-            "message": r[4], 
-            "created_at": r[5], 
+            "id": r[0],
+            "user_id": r[1],
+            "name": r[2],
+            "phone": r[3],
+            "message": r[4],
+            "created_at": r[5],
             "status": r[6]
-        } 
+        }
         for r in rows
     ]
+
+@app.get("/api/documents")
+async def get_documents(request: Request):
+    token = request.headers.get("X-Admin-Token")
+    authorize(request, token)
+    rows = conn.execute(
+        "SELECT id, user_id, file_id, file_name, sent_at FROM documents ORDER BY sent_at DESC"
+    ).fetchall()
+    return [
+        {
+            "id": r[0],
+            "user_id": r[1],
+            "file_id": r[2],
+            "file_name": r[3],
+            "sent_at": r[4]
+        }
+        for r in rows
+    ]
+
+@app.get("/api/download/{file_id}")
+async def download_document(file_id: str, request: Request):
+    token = request.headers.get("X-Admin-Token")
+    authorize(request, token)
+    url = f"https://api.telegram.org/bot{API_TOKEN}/getFile?file_id={file_id}"
+    import requests
+    resp = requests.get(url)
+    if not resp.ok or 'result' not in resp.json():
+        raise HTTPException(status_code=404, detail="Файл не найден в Telegram")
+    file_path = resp.json()['result']['file_path']
+    file_url = f"https://api.telegram.org/file/bot{API_TOKEN}/{file_path}"
+    file_resp = requests.get(file_url, stream=True)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{file_id}"'
+    }
+    return StreamingResponse(file_resp.raw, headers=headers)
 
 @app.post("/api/reply")
 async def reply_user(req: ReplyRequest, request: Request):
@@ -188,16 +231,16 @@ async def reply_user(req: ReplyRequest, request: Request):
         logging.error(f"Ошибка отправки сообщения: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/status") 
-async def update_status(req: StatusRequest, request: Request): 
+@app.post("/api/status")
+async def update_status(req: StatusRequest, request: Request):
     token = request.headers.get("X-Admin-Token")
     authorize(request, token)
-    with conn: 
-        conn.execute("UPDATE requests SET status = ? WHERE user_id = ?", (req.status, req.user_id)) 
+    with conn:
+        conn.execute("UPDATE requests SET status = ? WHERE user_id = ?", (req.status, req.user_id))
         return {"status": "updated"}
 
-@app.get("/admin", response_class=HTMLResponse) 
-async def admin_html(request: Request): 
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_html(request: Request):
     return """
 <!DOCTYPE html>
 <html lang="ru">
@@ -205,7 +248,6 @@ async def admin_html(request: Request):
     <meta charset="UTF-8">
     <title>LegalBot Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- Tabler Core CSS -->
     <link href="https://unpkg.com/@tabler/core@latest/dist/css/tabler.min.css" rel="stylesheet"/>
     <style>
         body { background: #f4f6fa; }
@@ -253,6 +295,20 @@ async def admin_html(request: Request):
                 <tbody id="reqTbody"></tbody>
             </table>
         </div>
+        <div id="documentsDiv" class="mt-4">
+          <h3>Документы</h3>
+          <table class="table table-striped" id="docTable">
+              <thead>
+                  <tr>
+                      <th>Пользователь</th>
+                      <th>Имя файла</th>
+                      <th>Дата</th>
+                      <th>Скачать</th>
+                  </tr>
+              </thead>
+              <tbody id="docTbody"></tbody>
+          </table>
+      </div>
     </div>
 </div>
 <script>
@@ -278,6 +334,7 @@ document.getElementById('loginBtn').onclick = async function() {
         document.getElementById('adminDiv').style.display = '';
         document.getElementById('loginError').style.display = 'none';
         load();
+        loadDocuments();
     } else {
         document.getElementById('loginError').style.display = '';
     }
@@ -285,15 +342,13 @@ document.getElementById('loginBtn').onclick = async function() {
 
 window.onload = checkAuth;
 
-// Используй apiFetch для всех защищённых запросов
+// Функция для защищённых API-запросов
 async function apiFetch(url, options = {}) {
     options.headers = options.headers || {};
     if(adminToken) options.headers['X-Admin-Token'] = adminToken;
     return fetch(url, options);
 }
 
-// Дальше везде вместо fetch('/api/requests') используй apiFetch('/api/requests')
-// Например:
 async function load() {
     document.getElementById('loader').style.display = "";
     document.getElementById('tableDiv').style.display = "none";
@@ -303,32 +358,69 @@ async function load() {
         return;
     }
     let allData = await res.json();
-    // ... далее отображай заявки как раньше
+    // Пример: просто отрисуй количество заявок
+    let tBody = document.getElementById('reqTbody');
+    tBody.innerHTML = '';
+    for(const r of allData) {
+        tBody.innerHTML += `<tr>
+            <td>${r.name}</td>
+            <td>${r.phone}</td>
+            <td>${r.created_at}</td>
+            <td>${r.message}</td>
+            <td>${r.status}</td>
+            <td></td>
+        </tr>`;
+    }
     document.getElementById('loader').style.display = "none";
     document.getElementById('tableDiv').style.display = "";
-    // renderTable(allData) и т.д.
+}
+
+async function loadDocuments() {
+    const res = await apiFetch('/api/documents');
+    if(res.status !== 200) return;
+    const docs = await res.json();
+    let tBody = document.getElementById('docTbody');
+    tBody.innerHTML = '';
+    for(const doc of docs) {
+        tBody.innerHTML += `<tr>
+            <td>${doc.user_id}</td>
+            <td>${doc.file_name}</td>
+            <td>${doc.sent_at}</td>
+            <td><a href="/api/download/${doc.file_id}" target="_blank" onclick="return adminToken ? (this.href += '?token=' + adminToken) : false;">Скачать</a></td>
+        </tr>`;
+    }
 }
 </script>
 </body>
 </html>
 """
 
-@dp.message(lambda m: m.text == "Часто задаваемые вопросы") 
-async def show_faq(message: types.Message): 
+@dp.message(lambda m: m.text == "Часто задаваемые вопросы")
+async def show_faq(message: types.Message):
     await message.answer("Часто задаваемые вопросы пока не добавлены.", reply_markup=get_menu_kb(message.from_user.id))
 
-@dp.message(lambda m: m.text == "Отправить документ") 
-async def ask_document(message: types.Message): 
+@dp.message(lambda m: m.text == "Отправить документ")
+async def ask_document(message: types.Message):
     await message.answer("Пожалуйста, отправьте документ (PDF, DOCX и т.д.)", reply_markup=get_menu_kb(message.from_user.id))
 
 @dp.message(lambda m: m.document)
 async def handle_document(message: types.Message):
+    from datetime import datetime
+    file_id = message.document.file_id
+    file_name = message.document.file_name
+    user_id = message.from_user.id
+    sent_at = datetime.now().isoformat()
+    with conn:
+        conn.execute(
+            "INSERT INTO documents (user_id, file_id, file_name, sent_at) VALUES (?, ?, ?, ?)",
+            (user_id, file_id, file_name, sent_at)
+        )
     await bot.send_document(
         ADMIN_CHAT_ID,
-        message.document.file_id,
-        caption=f"Документ от пользователя {message.from_user.full_name} ({message.from_user.id})"
+        file_id,
+        caption=f"Документ от пользователя {message.from_user.full_name} ({user_id})"
     )
-    await message.answer("Документ получен и отправлен администратору. Спасибо!", reply_markup=get_menu_kb(message.from_user.id))
+    await message.answer("Документ получен и отправлен администратору. Спасибо!", reply_markup=get_menu_kb(user_id))
 
 async def main():
     config = uvicorn.Config(app, host="0.0.0.0", port=8000, loop="asyncio", log_level="info")
