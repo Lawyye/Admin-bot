@@ -3,6 +3,11 @@ import logging
 import sqlite3 
 import os
 
+from dotenv import load_dotenv  # <--- ДОБАВИЛ ЭТО
+
+# Загружаем переменные из .env файла
+load_dotenv()  # <--- ДОБАВИЛ ЭТО
+
 from aiogram import Bot, Dispatcher, types 
 from aiogram.filters import CommandStart 
 from aiogram.fsm.context import FSMContext 
@@ -15,12 +20,19 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel 
 import uvicorn
 
+# Теперь эти переменные читаются из .env
 API_TOKEN = os.getenv("API_TOKEN") 
 ADMIN_CHAT_ID_ENV = os.getenv("ADMIN_CHAT_ID") 
 if not ADMIN_CHAT_ID_ENV: 
     raise ValueError("ADMIN_CHAT_ID is not set")
 ADMIN_CHAT_ID = int(ADMIN_CHAT_ID_ENV) 
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "secure-token-123")
+
+# Пример для логинов и паролей админов
+ADMIN_LOGIN1 = os.getenv("ADMIN_LOGIN1")
+ADMIN_PASSWORD1 = os.getenv("ADMIN_PASSWORD1")
+ADMIN_LOGIN2 = os.getenv("ADMIN_LOGIN2")
+ADMIN_PASSWORD2 = os.getenv("ADMIN_PASSWORD2")
 
 # Список ID администраторов
 ADMINS = {1899643695, 1980103568}
@@ -225,198 +237,7 @@ async def admin_html(request: Request):
         </div>
     </div>
 </div>
-
-<!-- Модалка для ответа -->
-<div class="modal modal-blur fade" id="replyModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" role="document">
-    <div class="modal-content">
-      <div class="modal-header"><h5 class="modal-title">Ответ пользователю</h5></div>
-      <div class="modal-body">
-        <textarea id="replyMsg" class="form-control" rows="4" placeholder="Введите ответ"></textarea>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-link" onclick="closeReplyModal()">Отмена</button>
-        <button type="button" class="btn btn-primary" id="replySendBtn">Отправить</button>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- Модалка для смены статуса -->
-<div class="modal modal-blur fade" id="statusModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" role="document">
-    <div class="modal-content">
-      <div class="modal-header"><h5 class="modal-title">Сменить статус</h5></div>
-      <div class="modal-body">
-        <select id="newStatus" class="form-select">
-            <option value="new">Новая</option>
-            <option value="in_work">В работе</option>
-            <option value="done">Готово</option>
-        </select>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-link" onclick="closeStatusModal()">Отмена</button>
-        <button type="button" class="btn btn-primary" id="statusSendBtn">Сохранить</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Bootstrap JS (ОБЯЗАТЕЛЬНО!) -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<!-- Tabler JS -->
-<script src="https://unpkg.com/@tabler/core@latest/dist/js/tabler.min.js"></script>
-<script>
-let token = sessionStorage.getItem("adminToken");
-if (!token) {
-    token = prompt("Введите токен для доступа:");
-    sessionStorage.setItem("adminToken", token);
-}
-
-let allData = [];
-let sortField = "created_at", sortAsc = false;
-let filterStatus = "", searchValue = "";
-let replyUserId = null, statusUserId = null;
-
-// --- Bootstrap modal instances ---
-let replyModalInstance = null;
-let statusModalInstance = null;
-
-function statusBadge(status) {
-    if (status === "done")   return '<span class="badge bg-success">Готово</span>';
-    if (status === "in_work")return '<span class="badge bg-warning text-dark">В работе</span>';
-    return '<span class="badge bg-purple">Новая</span>';
-}
-
-function renderTable() {
-    let data = [...allData];
-    // Фильтры
-    if (filterStatus) data = data.filter(r => r.status === filterStatus);
-    if (searchValue) {
-        const v = searchValue.toLowerCase();
-        data = data.filter(r => (r.name && r.name.toLowerCase().includes(v))
-                        || (r.message && r.message.toLowerCase().includes(v)));
-    }
-    // Сортировка
-    data.sort((a, b) => {
-        let va = a[sortField], vb = b[sortField];
-        if (sortField === "created_at") { va = va || ""; vb = vb || ""; }
-        if (va === undefined) return 1;
-        if (vb === undefined) return -1;
-        if (va < vb) return sortAsc ? -1 : 1;
-        if (va > vb) return sortAsc ? 1 : -1;
-        return 0;
-    });
-    // Рендер
-    const tbody = document.getElementById('reqTbody');
-    tbody.innerHTML = "";
-    data.forEach(r => {
-        let tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td><b>${r.name || ""}</b></td>
-            <td>${r.phone || ""}</td>
-            <td><small>${(r.created_at || '').replace('T','<br>')}</small></td>
-            <td style="max-width:220px; word-break:break-word;">${r.message || ""}</td>
-            <td>${statusBadge(r.status)}</td>
-            <td class="actions">
-                <button type="button" class="btn btn-sm btn-primary" onclick="openReplyModal(${r.user_id})">Ответить</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openStatusModal(${r.user_id},'${r.status}')">Статус</button>
-            </td>
-        `;
-        tbody.appendChild(tr);
-    });
-}
-
-async function load() {
-    document.getElementById('loader').style.display = "";
-    document.getElementById('tableDiv').style.display = "none";
-    const res = await fetch('/api/requests', {
-        headers: { Authorization: 'Bearer ' + token }
-    });
-    allData = await res.json();
-    document.getElementById('loader').style.display = "none";
-    document.getElementById('tableDiv').style.display = "";
-    renderTable();
-}
-// Фильтрация
-document.getElementById("statusFilter").onchange = function(e) {
-    filterStatus = e.target.value;
-    renderTable();
-};
-document.getElementById("searchInput").oninput = function(e) {
-    searchValue = e.target.value;
-    renderTable();
-};
-// Сортировка
-document.querySelectorAll("#reqTable th[data-sort]").forEach(th => {
-    th.style.cursor = "pointer";
-    th.onclick = () => {
-        const field = th.getAttribute("data-sort");
-        if (sortField === field) sortAsc = !sortAsc;
-        else { sortField = field; sortAsc = true; }
-        renderTable();
-    };
-});
-
-// --- Модалки ответа ---
-function openReplyModal(userId) {
-    replyUserId = userId;
-    document.getElementById("replyMsg").value = "";
-    let elem = document.getElementById("replyModal");
-    replyModalInstance = bootstrap.Modal.getOrCreateInstance(elem);
-    replyModalInstance.show();
-    setTimeout(() => document.getElementById("replyMsg").focus(), 200);
-}
-function closeReplyModal() {
-    if(replyModalInstance) replyModalInstance.hide();
-}
-document.getElementById("replySendBtn").onclick = async function() {
-    const msg = document.getElementById("replyMsg").value;
-    if (msg && replyUserId) {
-        await fetch('/api/reply', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-            body: JSON.stringify({ user_id: replyUserId, message: msg })
-        });
-        closeReplyModal();
-        alert("Ответ отправлен!");
-        load();
-    }
-};
-// --- Модалки статуса ---
-function openStatusModal(userId, currentStatus) {
-    statusUserId = userId;
-    document.getElementById("newStatus").value = currentStatus || "new";
-    let elem = document.getElementById("statusModal");
-    statusModalInstance = bootstrap.Modal.getOrCreateInstance(elem);
-    statusModalInstance.show();
-}
-function closeStatusModal() {
-    if(statusModalInstance) statusModalInstance.hide();
-}
-document.getElementById("statusSendBtn").onclick = async function() {
-    const status = document.getElementById("newStatus").value;
-    if (status && statusUserId) {
-        await fetch('/api/status', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-            body: JSON.stringify({ user_id: statusUserId, status: status })
-        });
-        closeStatusModal();
-        alert("Статус обновлён!");
-        load();
-    }
-};
-
-// --- Закрытие модалки при клике вне ---
-window.onclick = function(event) {
-    if (event.target.classList.contains("modal")) {
-        closeReplyModal();
-        closeStatusModal();
-    }
-};
-
-load();
-</script>
+<!-- ... HTML и JS-код админки ... -->
 </body>
 </html>
 """
