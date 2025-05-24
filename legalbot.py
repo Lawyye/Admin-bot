@@ -36,7 +36,8 @@ c.execute("""
         phone TEXT, 
         message TEXT, 
         created_at TEXT, 
-        status TEXT DEFAULT 'new')""") 
+        status TEXT DEFAULT 'new'
+    )""") 
 conn.commit()
 
 class RequestForm(StatesGroup): 
@@ -49,8 +50,10 @@ menu_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="Записаться на консультацию")], 
         [KeyboardButton(text="Часто задаваемые вопросы")], 
         [KeyboardButton(text="Отправить документ")], 
-        [KeyboardButton(text="Контакты")] ], 
-    resize_keyboard=True )
+        [KeyboardButton(text="Контакты")] 
+    ], 
+    resize_keyboard=True 
+)
 
 @dp.message(CommandStart()) 
 async def start(message: types.Message): 
@@ -84,8 +87,14 @@ async def save_request(message: types.Message, state: FSMContext):
     from datetime import datetime
     now = datetime.now().isoformat() 
     with conn: 
-        conn.execute("INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)", (message.from_user.id, data['name'], data['phone'], message.text, now, 'new')) 
-        await bot.send_message(ADMIN_CHAT_ID, f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {message.text}") 
+        conn.execute(
+            "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)", 
+            (message.from_user.id, data['name'], data['phone'], message.text, now, 'new')
+        ) 
+        await bot.send_message(
+            ADMIN_CHAT_ID, 
+            f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {message.text}"
+        ) 
         await message.answer("Спасибо! Мы свяжемся с вами.", reply_markup=menu_kb) 
         await state.clear()
 
@@ -111,7 +120,9 @@ async def root():
 @app.get("/api/requests") 
 async def get_requests(request: Request): 
     authorize(request) 
-    rows = conn.execute("SELECT id, user_id, name, phone, message, created_at, status FROM requests ORDER BY created_at DESC").fetchall() 
+    rows = conn.execute(
+        "SELECT id, user_id, name, phone, message, created_at, status FROM requests ORDER BY created_at DESC"
+    ).fetchall() 
     return [
         {
             "id": r[0], 
@@ -402,13 +413,16 @@ async def show_faq(message: types.Message):
 async def ask_document(message: types.Message): 
     await message.answer("Пожалуйста, отправьте документ (PDF, DOCX и т.д.)")
 
-@dp.message(lambda m: m.document) 
-async def handle_document(message: types.Message): 
-    await message.answer("Документ получен. Спасибо!")
+@dp.message(lambda m: m.document)
+async def handle_document(message: types.Message):
+    await bot.send_document(
+        ADMIN_CHAT_ID,
+        message.document.file_id,
+        caption=f"Документ от пользователя {message.from_user.full_name} ({message.from_user.id})"
+    )
+    await message.answer("Документ получен и отправлен администратору. Спасибо!")
 
 async def main():
-    # Запускаем FastAPI (uvicorn) как фонового сервера
-    # и aiogram polling в том же event loop
     config = uvicorn.Config(app, host="0.0.0.0", port=8000, loop="asyncio", log_level="info")
     server = uvicorn.Server(config)
     api_task = asyncio.create_task(server.serve())
