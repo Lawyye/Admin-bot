@@ -102,9 +102,11 @@ class StatusRequest(BaseModel):
     status: str
 
 def authorize(request: Request): 
-    token = request.headers.get("Authorization") 
-    if token != f"Bearer {ADMIN_TOKEN}": 
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    token = 
+request.headers.get("Authorization") 
+    if token != f"Bearer 
+{ADMIN_TOKEN}": raise 
+HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
 @app.get("/") async def root(): return {"status": "ok"}
 
