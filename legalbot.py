@@ -45,41 +45,43 @@ class RequestForm(StatesGroup):
     phone = State() 
     message = State()
 
-menu_kb = ReplyKeyboardMarkup( 
-    keyboard=[ 
-        [KeyboardButton(text="Записаться на консультацию")], 
-        [KeyboardButton(text="Часто задаваемые вопросы")], 
-        [KeyboardButton(text="Отправить документ")], 
-        [KeyboardButton(text="Контакты")] 
-    ], 
-    resize_keyboard=True 
-)
+# Динамическая клавиатура, чтобы показывать "Админ-панель" только админу
+def get_menu_kb(user_id: int):
+    keyboard = [
+        [KeyboardButton(text="Записаться на консультацию")],
+        [KeyboardButton(text="Часто задаваемые вопросы")],
+        [KeyboardButton(text="Отправить документ")],
+        [KeyboardButton(text="Контакты")]
+    ]
+    if user_id == ADMIN_CHAT_ID:
+        keyboard.append([KeyboardButton(text="Админ-панель")])
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 @dp.message(CommandStart()) 
 async def start(message: types.Message): 
-    await message.answer("Добро пожаловать в LegalBot!", reply_markup=menu_kb)
+    await message.answer("Добро пожаловать в LegalBot!", reply_markup=get_menu_kb(message.from_user.id))
 
 @dp.message(lambda m: m.text == "Контакты") 
 async def contacts(message: types.Message): 
-    await message.answer("г. Астрахань, ул. Татищева 20\n+7 988 600 56 61")
+    await message.answer("г. Астрахань, ул. Татищева 20\n+7 988 600 56 61", reply_markup=get_menu_kb(message.from_user.id))
 
 @dp.message(lambda m: m.text == "Записаться на консультацию") 
 async def consultation(message: types.Message, state: FSMContext): 
     await state.set_state(RequestForm.name) 
     await state.update_data(user_id=message.from_user.id) 
-    await message.answer("Введите ваше имя:")
+    await message.answer("Введите ваше имя:", reply_markup=get_menu_kb(message.from_user.id))
 
 @dp.message(RequestForm.name) 
 async def get_name(message: types.Message, state: FSMContext): 
     await state.update_data(name=message.text) 
     await state.set_state(RequestForm.phone) 
-    await message.answer("Введите номер телефона:")
+    await message.answer("Введите номер телефона:", reply_markup=get_menu_kb(message.from_user.id))
 
 @dp.message(RequestForm.phone) 
 async def get_phone(message: types.Message, state: FSMContext): 
     await state.update_data(phone=message.text) 
     await state.set_state(RequestForm.message) 
-    await message.answer("Опишите вашу проблему:")
+    await message.answer("Опишите вашу проблему:", reply_markup=get_menu_kb(message.from_user.id))
 
 @dp.message(RequestForm.message) 
 async def save_request(message: types.Message, state: FSMContext): 
@@ -95,8 +97,15 @@ async def save_request(message: types.Message, state: FSMContext):
             ADMIN_CHAT_ID, 
             f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {message.text}"
         ) 
-        await message.answer("Спасибо! Мы свяжемся с вами.", reply_markup=menu_kb) 
+        await message.answer("Спасибо! Мы свяжемся с вами.", reply_markup=get_menu_kb(message.from_user.id)) 
         await state.clear()
+
+@dp.message(lambda m: m.text == "Админ-панель")
+async def admin_panel(message: types.Message):
+    if message.from_user.id != ADMIN_CHAT_ID:
+        await message.answer("Доступ запрещён.")
+        return
+    await message.answer("Админ-панель: https://your-domain.com/admin", reply_markup=get_menu_kb(message.from_user.id))
 
 app = FastAPI()
 
@@ -407,11 +416,11 @@ load();
 
 @dp.message(lambda m: m.text == "Часто задаваемые вопросы") 
 async def show_faq(message: types.Message): 
-    await message.answer("Часто задаваемые вопросы пока не добавлены.")
+    await message.answer("Часто задаваемые вопросы пока не добавлены.", reply_markup=get_menu_kb(message.from_user.id))
 
 @dp.message(lambda m: m.text == "Отправить документ") 
 async def ask_document(message: types.Message): 
-    await message.answer("Пожалуйста, отправьте документ (PDF, DOCX и т.д.)")
+    await message.answer("Пожалуйста, отправьте документ (PDF, DOCX и т.д.)", reply_markup=get_menu_kb(message.from_user.id))
 
 @dp.message(lambda m: m.document)
 async def handle_document(message: types.Message):
@@ -420,7 +429,7 @@ async def handle_document(message: types.Message):
         message.document.file_id,
         caption=f"Документ от пользователя {message.from_user.full_name} ({message.from_user.id})"
     )
-    await message.answer("Документ получен и отправлен администратору. Спасибо!")
+    await message.answer("Документ получен и отправлен администратору. Спасибо!", reply_markup=get_menu_kb(message.from_user.id))
 
 async def main():
     config = uvicorn.Config(app, host="0.0.0.0", port=8000, loop="asyncio", log_level="info")
