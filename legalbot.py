@@ -105,7 +105,7 @@ async def admin_panel(message: types.Message):
     if message.from_user.id != ADMIN_CHAT_ID:
         await message.answer("Доступ запрещён.")
         return
-    await message.answer("Админ-панель: https://your-domain.com/admin", reply_markup=get_menu_kb(message.from_user.id))
+    await message.answer("Админ-панель: https:web-production-bb98.up.railway.app/admin?token=secure-token-123", reply_markup=get_menu_kb(message.from_user.id))
 
 app = FastAPI()
 
