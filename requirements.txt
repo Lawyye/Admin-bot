@@ -1,4 +1,5 @@
-aiogram
+aiogram[redis]
+redis
 fastapi
 uvicorn
 python-dotenv
