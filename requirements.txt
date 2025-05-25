@@ -7,3 +7,4 @@ aiosqlite
 pydantic
 requests
 jinja2
+itsdangerous
