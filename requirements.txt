@@ -9,3 +9,4 @@ requests
 jinja2
 itsdangerous
 httpx
+python-multipart
