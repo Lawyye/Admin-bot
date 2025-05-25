@@ -598,10 +598,23 @@ async def bot_webhook(update: dict):
 @app.on_event("startup")
 async def on_startup():
     try:
+        # подключение Redis и установка вебхука
         redis = storage.redis
         await redis.ping()
         await bot.delete_webhook()
         await bot.set_webhook(WEBHOOK_URL)
+
+        # === ВРЕМЕННО добавляем колонку file_path в таблицу documents ===
+        try:
+            conn.execute("ALTER TABLE documents ADD COLUMN file_path TEXT")
+            conn.commit()
+            print("✅ Добавлена колонка file_path в таблицу documents")
+        except Exception as e:
+            if "duplicate column name" in str(e):
+                print("ℹ️ Колонка file_path уже существует, пропускаем")
+            else:
+                print("❌ Ошибка при добавлении колонки:", e)
+
     except Exception as e:
         logging.error(f"Startup error: {e}")
         raise
