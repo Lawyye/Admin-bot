@@ -1,8 +1,7 @@
-import asyncio
-import logging
-import sqlite3
 import os
 import re
+import logging
+import sqlite3
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -31,13 +30,11 @@ ADMIN_LOGIN1 = os.getenv("ADMIN_LOGIN1")
 ADMIN_PASSWORD1 = os.getenv("ADMIN_PASSWORD1")
 ADMIN_LOGIN2 = os.getenv("ADMIN_LOGIN2")
 ADMIN_PASSWORD2 = os.getenv("ADMIN_PASSWORD2")
-ADMIN_CREDENTIALS = [
-    (ADMIN_LOGIN1, ADMIN_PASSWORD1),
-    (ADMIN_LOGIN2, ADMIN_PASSWORD2)
-]
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
 ADMINS = {1899643695, 1980103568}
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret")
+
+logging.basicConfig(level=logging.INFO)
 
 # === BOT & FASTAPI INIT ===
 storage = RedisStorage.from_url(
@@ -46,6 +43,10 @@ storage = RedisStorage.from_url(
 )
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=storage)
+app = FastAPI()
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # === DB INIT ===
 conn = sqlite3.connect("bot.db", check_same_thread=False)
@@ -116,9 +117,7 @@ translations = {
         'loader': "Загрузка заявок...",
         'choose_language': "Выберите язык / Choose language",
         'lang_ru': "🇷🇺 Русский",
-        'lang_en': "🇺🇸 English",
-        'send_file_or_done': "Пожалуйста, отправьте файл или нажмите /done для завершения.",
-        'error_occurred': "Произошла ошибка. Попробуйте позже."
+        'lang_en': "🇺🇸 English"
     },
     'en': {
         'welcome': "Welcome to LegalBot!",
@@ -159,9 +158,7 @@ translations = {
         'loader': "Loading requests...",
         'choose_language': "Choose your language / Выберите язык",
         'lang_ru': "🇷🇺 Русский",
-        'lang_en': "🇺🇸 English",
-        'send_file_or_done': "Please send a file or press /done to finish.",
-        'error_occurred': "An error occurred. Please try again later."
+        'lang_en': "🇺🇸 English"
     }
 }
 
@@ -190,12 +187,7 @@ async def get_lang(state: FSMContext, user_id: int) -> str:
     data = await state.get_data()
     lang = data.get('lang')
     if not lang:
-        # Сначала проверяем БД
-        lang = get_user_language(user_id)
-        if not lang:
-            # Если в БД нет, устанавливаем русский по умолчанию
-            lang = 'ru'
-            save_user_language(user_id, lang)
+        lang = get_user_language(user_id) or 'ru'
         await state.update_data(lang=lang)
     return lang
 
@@ -204,8 +196,7 @@ def get_menu_kb(user_id: int, lang: str = 'ru'):
     keyboard = [
         [KeyboardButton(text=t['consult_button'])],
         [KeyboardButton(text=t['faq_button'])],
-        [KeyboardButton(text=t['contacts_button'])],
-        [KeyboardButton(text="🌐 Язык / Language")]  # Новая кнопка
+        [KeyboardButton(text=t['contacts_button'])]
     ]
     if user_id in ADMINS:
         keyboard.append([KeyboardButton(text=t['admin_panel_button'])])
@@ -253,34 +244,19 @@ async def start(message: types.Message, state: FSMContext):
         return
     lang = saved_lang
     await state.update_data(lang=lang)
-    await message.answer(
-        translations[lang]['welcome'],
-        reply_markup=get_menu_kb(user_id, lang)
-    )
-
-# Команда для перезапуска бота
-@dp.message(lambda m: m.text and m.text.lower() == '/restart')
-async def restart_bot(message: types.Message, state: FSMContext):
-    await state.clear()
-    await start(message, state)
-
-# Команды для смены языка
-@dp.message(lambda m: m.text and m.text.lower() in ['/language', '/lang', '/язык'])
-async def change_language_command(message: types.Message, state: FSMContext):
-    await state.set_state(RequestForm.language)
-    await message.answer(
-        translations['ru']['choose_language'],
-        reply_markup=get_lang_kb()
-    )
-
-# Обработчик для кнопки смены языка
-@dp.message(lambda m: m.text == "🌐 Язык / Language")
-async def language_button_handler(message: types.Message, state: FSMContext):
-    await state.set_state(RequestForm.language)
-    await message.answer(
-        translations['ru']['choose_language'],
-        reply_markup=get_lang_kb()
-    )
+    try:
+        await bot.send_photo(
+            chat_id=message.chat.id,
+            photo="https://i.imgur.com/HDFlGu5.png",
+            caption=translations[lang]['welcome'],
+            reply_markup=get_menu_kb(user_id, lang)
+        )
+    except Exception as e:
+        logging.error(f"Error sending photo: {e}")
+        await message.answer(
+            translations[lang]['welcome'],
+            reply_markup=get_menu_kb(user_id, lang)
+        )
 
 @dp.message(RequestForm.language, F.text)
 async def choose_lang(message: types.Message, state: FSMContext):
@@ -299,10 +275,19 @@ async def choose_lang(message: types.Message, state: FSMContext):
     save_user_language(user_id, lang)
     await state.update_data(lang=lang)
     await state.clear()
-    await message.answer(
-        translations[lang]['welcome'],
-        reply_markup=get_menu_kb(user_id, lang)
-    )
+    try:
+        await bot.send_photo(
+            chat_id=message.chat.id,
+            photo="https://i.imgur.com/HDFlGu5.png",
+            caption=translations[lang]['welcome'],
+            reply_markup=get_menu_kb(user_id, lang)
+        )
+    except Exception as e:
+        logging.error(f"Error sending welcome message: {e}")
+        await message.answer(
+            translations[lang]['welcome'],
+            reply_markup=get_menu_kb(user_id, lang)
+        )
 
 @dp.message(lambda m: m.text in [
     translations['ru']['main_menu_btn'], translations['en']['main_menu_btn'],
@@ -407,98 +392,45 @@ async def attach_docs_handler(message: types.Message, state: FSMContext):
         await show_main_menu(message, state)
         return
 
-    # Обработка любого типа файла
-    file_info = None
-    
     if message.document:
-        file_info = {
-            'file_id': message.document.file_id,
-            'file_name': message.document.file_name or 'document'
-        }
-    elif message.photo:
-        file_info = {
-            'file_id': message.photo[-1].file_id,  # Берем фото максимального размера
-            'file_name': 'photo.jpg'
-        }
-    elif message.video:
-        file_info = {
-            'file_id': message.video.file_id,
-            'file_name': message.video.file_name or 'video.mp4'
-        }
-    elif message.audio:
-        file_info = {
-            'file_id': message.audio.file_id,
-            'file_name': message.audio.file_name or 'audio.mp3'
-        }
-    elif message.voice:
-        file_info = {
-            'file_id': message.voice.file_id,
-            'file_name': 'voice.ogg'
-        }
-    elif message.video_note:
-        file_info = {
-            'file_id': message.video_note.file_id,
-            'file_name': 'video_note.mp4'
-        }
-    elif message.sticker:
-        file_info = {
-            'file_id': message.sticker.file_id,
-            'file_name': 'sticker.webp'
-        }
-    
-    if file_info:
         data = await state.get_data()
         docs = data.get('documents', [])
         if len(docs) >= 3:
             await message.answer(translations[lang]['attach_max'])
             return
-        docs.append(file_info)
+        docs.append({
+            'file_id': message.document.file_id,
+            'file_name': message.document.file_name or 'document'
+        })
         await state.update_data(documents=docs)
         await message.answer(
-            translations[lang]['attach_added'].format(file_info['file_name'])
+            translations[lang]['attach_added'].format(message.document.file_name or 'document')
         )
-    else:
-        await message.answer(translations[lang]['send_file_or_done'])
 
 async def finish_request(message: types.Message, state: FSMContext):
-    try:
-        data = await state.get_data()
-        lang = data.get('lang') or get_user_language(message.from_user.id) or 'ru'
-        from datetime import datetime
-        now = datetime.now().isoformat()
-        user_id = message.from_user.id
-        
-        with conn:
+    data = await state.get_data()
+    lang = data.get('lang') or get_user_language(message.from_user.id) or 'ru'
+    from datetime import datetime
+    now = datetime.now().isoformat()
+    user_id = message.from_user.id
+    with conn:
+        c.execute(
+            "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, data['name'], data['phone'], data['message'], now, 'new')
+        )
+        req_id = c.lastrowid
+        docs = data.get('documents', [])
+        for doc in docs:
             c.execute(
-                "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)",
-                (user_id, data['name'], data['phone'], data['message'], now, 'new')
+                "INSERT INTO documents (request_id, file_id, file_name, sent_at) VALUES (?, ?, ?, ?)",
+                (req_id, doc['file_id'], doc['file_name'], now)
             )
-            req_id = c.lastrowid
-            docs = data.get('documents', [])
-            for doc in docs:
-                c.execute(
-                    "INSERT INTO documents (request_id, file_id, file_name, sent_at) VALUES (?, ?, ?, ?)",
-                    (req_id, doc['file_id'], doc['file_name'], now)
-                )
-        
-        admin_msg = f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {data['message']}"
-        if docs:
-            admin_msg += "\nДокументы: " + ", ".join(d['file_name'] for d in docs)
-        
-        try:
-            await bot.send_message(ADMIN_CHAT_ID, admin_msg)
-        except Exception as e:
-            logging.error(f"Failed to send admin notification: {e}")
-            # Продолжаем работу даже если уведомление админу не отправилось
-        
-        await message.answer(translations[lang]['thanks'], reply_markup=get_menu_kb(user_id, lang))
-        await state.clear()
-        
-    except Exception as e:
-        logging.error(f"Error in finish_request: {e}")
-        lang = get_user_language(message.from_user.id) or 'ru'
-        await message.answer(translations[lang]['error_occurred'], reply_markup=get_menu_kb(message.from_user.id, lang))
-        await state.clear()
+    admin_msg = f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {data['message']}"
+    if docs:
+        admin_msg += "\nДокументы: " + ", ".join(d['file_name'] for d in docs)
+    await bot.send_message(ADMIN_CHAT_ID, admin_msg)
+    await message.answer(translations[lang]['thanks'], reply_markup=get_menu_kb(user_id, lang))
+    await state.clear()
 
 @dp.message(lambda m: m.text in [translations['ru']['admin_panel_button'], translations['en']['admin_panel_button']])
 async def admin_panel(message: types.Message, state: FSMContext):
@@ -528,7 +460,10 @@ def is_authenticated(request: Request) -> bool:
     return request.session.get("admin") is not None
 
 def authenticate_user(username: str, password: str) -> bool:
-    return (username, password) in ADMIN_CREDENTIALS
+    return (
+        (username == ADMIN_LOGIN1 and password == ADMIN_PASSWORD1) or
+        (username == ADMIN_LOGIN2 and password == ADMIN_PASSWORD2)
+    )
 
 def get_requests_data(search: Optional[str]=None, status_f: Optional[str]=None):
     sql = """
@@ -635,35 +570,42 @@ async def download_file(file_id: str, request: Request):
             return StreamingResponse(r.aiter_bytes(), headers=headers)
     except Exception as e:
         logging.error(f"Download error: {e}")
-        return Response("Ошибка при загрузке файла", status_code=500)
+        return Response("Ошибка скачивания", status_code=500)
 
+# === WEBHOOK for Telegram (если нужно) ===
+WEBHOOK_PATH = f"/webhook/{API_TOKEN}"
+WEBHOOK_URL = APP_URL + WEBHOOK_PATH
 
+@app.post(WEBHOOK_PATH)
+async def bot_webhook(update: dict):
+    try:
+        telegram_update = types.Update(**update)
+        await dp.feed_update(bot=bot, update=telegram_update)
+        return {"ok": True}
+    except Exception as e:
+        logging.error(f"Webhook error: {str(e)}", exc_info=True)
+        return {"ok": False, "error": str(e)}
 
-@app.post(f"/webhook/{API_TOKEN}")
-async def telegram_webhook(request: Request):
-    body = await request.body()
-    update = types.Update.model_validate_json(body.decode())
-    await dp.feed_update(bot, update)
-    return {"status": "ok"}
+@app.on_event("startup")
+async def on_startup():
+    try:
+        redis = storage.redis
+        await redis.ping()
+        await bot.delete_webhook()
+        await bot.set_webhook(WEBHOOK_URL)
+    except Exception as e:
+        logging.error(f"Startup error: {e}")
+        raise
 
-from contextlib import asynccontextmanager
+@app.on_event("shutdown")
+async def on_shutdown():
+    try:
+        await bot.session.close()
+        await storage.close()
+    except Exception as e:
+        logging.error(f"Shutdown error: {e}")
+        raise
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await bot.set_webhook(f"{APP_URL}/webhook/{API_TOKEN}")
-    logging.info("Webhook установлен")
-    yield
-    await bot.delete_webhook()
-    logging.info("Webhook удалён")
-
-app = FastAPI(lifespan=lifespan)
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-@app.post(f"/webhook/{API_TOKEN}")
-async def telegram_webhook(request: Request):
-    body = await request.body()
-    update = types.Update.model_validate_json(body.decode())
-    await dp.feed_update(bot, update)
-    return {"status": "ok"}
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
