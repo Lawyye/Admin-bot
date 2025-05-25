@@ -3,6 +3,7 @@ import logging
 import sqlite3
 import os
 import re
+from redis.asyncio.connection import ConnectionError as RedisConnectionError
 
 from dotenv import load_dotenv
 
@@ -35,10 +36,19 @@ ADMIN_PASSWORD2 = os.getenv("ADMIN_PASSWORD2")
 ADMINS = {1899643695, 1980103568}
 
 bot = Bot(token=API_TOKEN)
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-storage = RedisStorage.from_url(REDIS_URL, key_builder=DefaultKeyBuilder(prefix="fsm"))
-dp = Dispatcher(storage=storage)
-logging.basicConfig(level=logging.INFO)
+REDIS_URL = os.getenv("REDIS_URL")
+if not REDIS_URL:
+    raise ValueError("REDIS_URL environment variable is not set")
+
+try:
+    storage = RedisStorage.from_url(
+        REDIS_URL,
+        key_builder=DefaultKeyBuilder(prefix="fsm")
+    )
+    logging.info(f"Initialized Redis storage with URL: {REDIS_URL.split('@')[-1]}")
+except Exception as e:
+    logging.error(f"Failed to initialize Redis storage: {e}")
+    raise
 
 conn = sqlite3.connect("bot.db", check_same_thread=False)
 c = conn.cursor()
@@ -495,26 +505,44 @@ async def get_requests(request: Request):
 
 # --- Webhook configuration ---
 WEBHOOK_PATH = f"/webhook/{API_TOKEN}"
-WEBHOOK_URL = f"https://web-production-bb98.up.railway.app{WEBHOOK_PATH}"
+APP_URL = "https://web-production-bb98.up.railway.app"
+WEBHOOK_URL = APP_URL + WEBHOOK_PATH
 
 @app.on_event("startup")
 async def on_startup():
-    await bot.set_webhook(WEBHOOK_URL)
-    print(f"Webhook set: {WEBHOOK_URL}")
+    try:
+        # Проверяем подключение к Redis
+        redis = storage.redis
+        await redis.ping()
+        logging.info("Successfully connected to Redis")
+        
+        # Настраиваем вебхук
+        await bot.delete_webhook()
+        await bot.set_webhook(WEBHOOK_URL)
+        logging.info(f"Webhook set to: {WEBHOOK_URL}")
+    except RedisConnectionError as e:
+        logging.error(f"Redis connection failed: {e}")
+        raise
+    except Exception as e:
+        logging.error(f"Startup error: {e}")
+        raise
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    await bot.delete_webhook()
-    await bot.session.close()
-
-from aiogram.types import Update
+    try:
+        await bot.session.close()
+        await storage.close()
+        logging.info("Bot session and Redis storage closed")
+    except Exception as e:
+        logging.error(f"Shutdown error: {e}")
+        raise
 
 @app.post(WEBHOOK_PATH)
-async def telegram_webhook(request: Request):
-    data = await request.json()
-    update = Update.model_validate(data)
-    await dp.feed_update(bot, update)
+async def bot_webhook(update: dict):
+    telegram_update = types.Update(**update)
+    await dp.feed_update(bot=bot, update=telegram_update)
     return {"ok": True}
+
 
 # ---- ДОБАВЛЕН ЭХО-ХЭНДЛЕР В КОНЕЦ ФАЙЛА ----
 @dp.message()
