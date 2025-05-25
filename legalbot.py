@@ -35,7 +35,9 @@ ADMIN_PASSWORD2 = os.getenv("ADMIN_PASSWORD2")
 ADMINS = {1899643695, 1980103568}
 
 bot = Bot(token=API_TOKEN)
-dp = Dispatcher(storage=MemoryStorage())
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+storage = RedisStorage.from_url(REDIS_URL, key_builder=DefaultKeyBuilder(prefix="fsm"))
+dp = Dispatcher(storage=storage)
 logging.basicConfig(level=logging.INFO)
 
 conn = sqlite3.connect("bot.db", check_same_thread=False)
