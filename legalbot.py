@@ -220,7 +220,7 @@ async def start(message: types.Message, state: FSMContext):
     saved_lang = get_user_language(user_id)
     
     # Если язык не сохранен, предлагаем выбрать
-    if not saved_lang:  # ИСПРАВЛЕНО: убрана проверка на 'ru'
+    if not saved_lang:
         await state.set_state(RequestForm.language)
         await message.answer(
             translations['ru']['choose_language'], 
@@ -489,15 +489,26 @@ async def get_requests(request: Request):
         })
     return result
 
-import threading
+# --- Webhook configuration ---
+WEBHOOK_PATH = f"/webhook/{API_TOKEN}"
+WEBHOOK_URL = f"https://web-production-bb98.up.railway.app{WEBHOOK_PATH}"
 
-def run_bot():
-    import asyncio
-    asyncio.run(dp.start_polling(bot))
+@app.on_event("startup")
+async def on_startup():
+    await bot.set_webhook(WEBHOOK_URL)
+    print(f"Webhook set: {WEBHOOK_URL}")
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    await bot.delete_webhook()
+    await bot.session.close()
+
+@app.post(WEBHOOK_PATH)
+async def telegram_webhook(request: Request):
+    update = await request.json()
+    await dp.feed_update(bot, update)
+    return {"ok": True}
 
 if __name__ == "__main__":
-    # Запускаем aiogram polling в отдельном потоке
-    threading.Thread(target=run_bot, daemon=True).start()
-    # Запускаем FastAPI сервер
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
