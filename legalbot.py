@@ -578,12 +578,19 @@ async def download_file(file_id: str, request: Request):
 
         filename, file_path = row
 
+        # fallback: восстановим путь из Telegram, если его нет
         if not file_path:
-            return Response("file_path отсутствует", status_code=500)
+            tg_file = await bot.get_file(file_id)
+            file_path = tg_file.file_path
 
-        file_url = (
-            f"https://api.telegram.org/file/bot{API_TOKEN}/{file_path}"
-        )
+            # обновим в базе
+            c.execute(
+                "UPDATE documents SET file_path = ? WHERE file_id = ?",
+                (file_path, file_id)
+            )
+            conn.commit()
+
+        file_url = f"https://api.telegram.org/file/bot{API_TOKEN}/{file_path}"
 
         async with httpx.AsyncClient() as client:
             r = await client.get(file_url)
@@ -594,20 +601,15 @@ async def download_file(file_id: str, request: Request):
             filename_utf8 = quote(filename)
 
             headers = {
-                "Content-Disposition": (
-                    f"attachment; filename*=UTF-8''{filename_utf8}"
-                )
+                "Content-Disposition": f"attachment; filename*=UTF-8''{filename_utf8}"
             }
 
-            return StreamingResponse(
-                r.aiter_bytes(),
-                headers=headers
-            )
+            return StreamingResponse(r.aiter_bytes(), headers=headers)
 
-except Exception as e:
-    import traceback
-    logging.error("Download error:", exc_info=True)
-    return Response("Ошибка скачивания", status_code=500)
+    except Exception as e:
+        import traceback
+        logging.error("Download error:", exc_info=True)
+        return Response("Ошибка скачивания", status_code=500)
 
 
 
