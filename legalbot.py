@@ -641,17 +641,18 @@ async def download_file(file_id: str, request: Request):
         logging.error(f"Download error: {e}")
         return Response("Ошибка при загрузке файла", status_code=500)
 
+from contextlib import asynccontextmanager
 from fastapi import Request
 
-@app.on_event("startup")
-async def on_startup():
-    await bot.set_webhook(f"{APP_URL}/webhook")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await bot.set_webhook(f"{APP_URL}/webhook/{API_TOKEN}")
     logging.info("Webhook установлен")
-
-@app.on_event("shutdown")
-async def on_shutdown():
+    yield
     await bot.delete_webhook()
     logging.info("Webhook удалён")
+
+app = FastAPI(lifespan=lifespan)
 
 @app.post(f"/webhook/{API_TOKEN}")
 async def telegram_webhook(request: Request):
