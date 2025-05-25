@@ -604,7 +604,7 @@ async def download_file(file_id: str, request: Request):
                 headers=headers
             )
 
-    except Exception as e:
+except Exception as e:
     import traceback
     logging.error("Download error:", exc_info=True)
     return Response("Ошибка скачивания", status_code=500)
