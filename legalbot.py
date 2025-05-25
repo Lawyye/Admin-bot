@@ -47,9 +47,6 @@ storage = RedisStorage.from_url(
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=storage)
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # === DB INIT ===
 conn = sqlite3.connect("bot.db", check_same_thread=False)
@@ -642,7 +639,6 @@ async def download_file(file_id: str, request: Request):
         return Response("Ошибка при загрузке файла", status_code=500)
 
 from contextlib import asynccontextmanager
-from fastapi import Request
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -653,6 +649,9 @@ async def lifespan(app: FastAPI):
     logging.info("Webhook удалён")
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.post(f"/webhook/{API_TOKEN}")
 async def telegram_webhook(request: Request):
