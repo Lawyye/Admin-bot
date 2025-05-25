@@ -21,7 +21,23 @@ from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+
+# Проверка и получение необходимых переменных окружения
 API_TOKEN = os.getenv("API_TOKEN")
+if not API_TOKEN:
+    raise ValueError("API_TOKEN is not set")
+
+REDIS_URL = os.getenv("REDIS_URL")
+if not REDIS_URL:
+    raise ValueError("REDIS_URL environment variable is not set")
+
+# Webhook configuration
+WEBHOOK_PATH = f"/webhook/{API_TOKEN}"
+APP_URL = "https://web-production-bb98.up.railway.app"
+WEBHOOK_URL = APP_URL + WEBHOOK_PATH
+
 ADMIN_CHAT_ID_ENV = os.getenv("ADMIN_CHAT_ID")
 if not ADMIN_CHAT_ID_ENV:
     raise ValueError("ADMIN_CHAT_ID is not set")
@@ -35,11 +51,7 @@ ADMIN_PASSWORD2 = os.getenv("ADMIN_PASSWORD2")
 
 ADMINS = {1899643695, 1980103568}
 
-bot = Bot(token=API_TOKEN)
-REDIS_URL = os.getenv("REDIS_URL")
-if not REDIS_URL:
-    raise ValueError("REDIS_URL environment variable is not set")
-
+# Инициализация Redis
 try:
     storage = RedisStorage.from_url(
         REDIS_URL,
@@ -50,6 +62,14 @@ except Exception as e:
     logging.error(f"Failed to initialize Redis storage: {e}")
     raise
 
+# Инициализация бота и диспетчера
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(storage=storage)
+
+# Инициализация FastAPI
+app = FastAPI()
+
+# Инициализация базы данных
 conn = sqlite3.connect("bot.db", check_same_thread=False)
 c = conn.cursor()
 c.execute("""
@@ -542,7 +562,6 @@ async def bot_webhook(update: dict):
     telegram_update = types.Update(**update)
     await dp.feed_update(bot=bot, update=telegram_update)
     return {"ok": True}
-
 
 # ---- ДОБАВЛЕН ЭХО-ХЭНДЛЕР В КОНЕЦ ФАЙЛА ----
 @dp.message()
