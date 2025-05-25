@@ -1,38 +1,142 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Admin Panel</title>
-    <style>
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 8px; border: 1px solid #ddd; }
-        th { background-color: #f2f2f2; }
-    </style>
+    <title>LegalBot Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <h1>Заявки</h1>
-    <table>
+<div class="header">
+    <h2>Заявки и документы LegalBot</h2>
+    <form method="post" action="/admin/logout" style="display:inline;">
+        <button type="submit" class="logout-btn">Выйти</button>
+    </form>
+</div>
+<div class="filters">
+    <input type="text" id="search" placeholder="Поиск по имени, сообщению и т.д.">
+    <select id="status-filter">
+        <option value="">Все статусы</option>
+        <option value="new">new</option>
+        <option value="inwork">inwork</option>
+        <option value="done">done</option>
+    </select>
+</div>
+<table>
+    <thead>
         <tr>
             <th>ID</th>
-            <th>User ID</th>
+            <th>Дата</th>
             <th>Имя</th>
             <th>Телефон</th>
             <th>Сообщение</th>
-            <th>Дата</th>
             <th>Статус</th>
-            <th>Файлы</th>
+            <th>Документы</th>
+            <th>Действия</th>
         </tr>
-        {% for req in requests %}
-        <tr>
-            <td>{{ req.id }}</td>
-            <td>{{ req.user_id }}</td>
-            <td>{{ req.name }}</td>
-            <td>{{ req.phone }}</td>
-            <td>{{ req.message }}</td>
-            <td>{{ req.created_at }}</td>
-            <td>{{ req.status }}</td>
-            <td>{{ req.files }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+    </thead>
+    <tbody id="requests-table"></tbody>
+</table>
+
+<!-- Reply modal -->
+<div id="reply-modal" style="display:none;">
+    <div class="modal-content">
+        <span onclick="closeReplyModal()" class="close">&times;</span>
+        <h3>Ответ пользователю</h3>
+        <form id="reply-form">
+            <textarea name="message" rows="4" required></textarea>
+            <input type="hidden" name="user_id" id="reply-user-id">
+            <button type="submit">Отправить</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    let filterSearch = "";
+    let filterStatus = "";
+
+    function fetchRequests() {
+        fetch(`/admin/api/requests?search=${encodeURIComponent(filterSearch)}&status_f=${encodeURIComponent(filterStatus)}`)
+            .then(res => res.json())
+            .then(data => {
+                renderRequests(data.requests);
+            });
+    }
+    function renderRequests(requests) {
+        let tbody = document.getElementById('requests-table');
+        tbody.innerHTML = '';
+        for (let req of requests) {
+            let row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${req.id}</td>
+                <td>${req.created_at}</td>
+                <td>${req.name}</td>
+                <td>${req.phone}</td>
+                <td>${req.message}</td>
+                <td>
+                    <form onsubmit="return updateStatus(event, ${req.id})">
+                        <select name="status">
+                            <option value="new" ${req.status === 'new' ? 'selected' : ''}>new</option>
+                            <option value="inwork" ${req.status === 'inwork' ? 'selected' : ''}>inwork</option>
+                            <option value="done" ${req.status === 'done' ? 'selected' : ''}>done</option>
+                        </select>
+                        <input type="hidden" name="id" value="${req.id}">
+                        <button type="submit">OK</button>
+                    </form>
+                </td>
+                <td>
+                    ${(req.documents || []).map(doc =>
+                        `<a href="/admin/download/${doc.file_id}" class="doc-btn" download>${doc.file_name}</a>`
+                    ).join("<br>")}
+                </td>
+                <td>
+                    <button onclick="showReplyModal(${req.user_id})">Ответить</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        }
+    }
+    function showReplyModal(userId) {
+        document.getElementById('reply-user-id').value = userId;
+        document.getElementById('reply-modal').style.display = 'block';
+    }
+    function closeReplyModal() {
+        document.getElementById('reply-modal').style.display = 'none';
+    }
+    document.getElementById('reply-form').onsubmit = function(e) {
+        e.preventDefault();
+        var form = e.target;
+        var data = new FormData(form);
+        fetch('/admin/reply', {
+            method: 'POST',
+            body: data
+        }).then(() => {
+            closeReplyModal();
+            alert("Ответ отправлен!");
+        });
+    };
+    function updateStatus(event, reqId) {
+        event.preventDefault();
+        var form = event.target;
+        var data = new FormData(form);
+        fetch('/admin/status', {
+            method: 'POST',
+            body: data
+        }).then(() => {
+            alert("Статус обновлён!");
+            fetchRequests();
+        });
+        return false;
+    }
+    document.getElementById('search').addEventListener('input', function() {
+        filterSearch = this.value;
+        fetchRequests();
+    });
+    document.getElementById('status-filter').addEventListener('change', function() {
+        filterStatus = this.value;
+        fetchRequests();
+    });
+    setInterval(fetchRequests, 5000);
+    window.onload = fetchRequests;
+</script>
 </body>
-          </html>
+</html>
