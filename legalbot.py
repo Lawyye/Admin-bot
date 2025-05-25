@@ -274,6 +274,7 @@ async def choose_lang(message: types.Message, state: FSMContext):
     logging.info(f"LANG HANDLER STATE: {current_state}")
     logging.info(f"LANG SELECTED: {message.text}")
     text = message.text.strip()
+    
     if text == translations['ru']['lang_ru']:
         lang = 'ru'
     elif text == translations['en']['lang_en']:
@@ -288,21 +289,36 @@ async def choose_lang(message: types.Message, state: FSMContext):
 
     user_id = message.from_user.id
     save_user_language(user_id, lang)
-    logging.info("Язык пользователя сохранён.")
+    await state.update_data(lang=lang)  # Сохраняем язык в state перед очисткой
     await state.clear()
-    logging.info("Состояние FSM очищено.")
-
+    
     try:
+        # Пробуем отправить фото и приветствие
         await bot.send_photo(
             chat_id=message.chat.id,
             photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
             caption=translations[lang]['welcome'],
             reply_markup=get_menu_kb(user_id, lang)
         )
-        logging.info("Фото с приветствием отправлено успешно.")
+        logging.info(f"Successfully sent welcome message in {lang}")
     except Exception as e:
-        logging.error(f"Ошибка при отправке фото: {e}")
-        await message.answer("Ошибка при отправке приветствия. Пожалуйста, напишите /start ещё раз.")
+        logging.error(f"Error sending welcome message: {str(e)}")
+        # Если не удалось отправить фото, пробуем отправить только текст
+        try:
+            await message.answer(
+                translations[lang]['welcome'],
+                reply_markup=get_menu_kb(user_id, lang)
+            )
+            logging.info("Sent welcome message without photo")
+        except Exception as e2:
+            logging.error(f"Error sending text-only welcome: {str(e2)}")
+            await message.answer(
+                "Ошибка при отправке приветствия. Пожалуйста, напишите /start ещё раз.",
+                reply_markup=ReplyKeyboardMarkup(
+                    keyboard=[[KeyboardButton(text="/start")]],
+                    resize_keyboard=True
+                )
+            )
 
 @dp.message(lambda m: m.text in [translations['ru']['contacts_button'], translations['en']['contacts_button']])
 async def contacts(message: types.Message, state: FSMContext):
