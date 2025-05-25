@@ -503,9 +503,12 @@ async def on_shutdown():
     await bot.delete_webhook()
     await bot.session.close()
 
+from aiogram.types import Update
+
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
-    update = await request.json()
+    data = await request.json()
+    update = Update.model_validate(data)  # <-- вот эта строка важна!
     await dp.feed_update(bot, update)
     return {"ok": True}
 
