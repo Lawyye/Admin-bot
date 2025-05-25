@@ -639,4 +639,4 @@ async def download_file(file_id: str, request: Request):
             return StreamingResponse(r.aiter_bytes(), headers=headers)
     except Exception as e:
         logging.error(f"Download error: {e}")
-        return Response("
+        return Response("Ошибка при загрузке файла", status_code=500)
