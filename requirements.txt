@@ -6,3 +6,4 @@ python-dotenv
 aiosqlite
 pydantic
 requests
+jinja2
