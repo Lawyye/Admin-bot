@@ -1,1 +1,38 @@
-
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Panel</title>
+    <style>
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 8px; border: 1px solid #ddd; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>Заявки</h1>
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>User ID</th>
+            <th>Имя</th>
+            <th>Телефон</th>
+            <th>Сообщение</th>
+            <th>Дата</th>
+            <th>Статус</th>
+            <th>Файлы</th>
+        </tr>
+        {% for req in requests %}
+        <tr>
+            <td>{{ req.id }}</td>
+            <td>{{ req.user_id }}</td>
+            <td>{{ req.name }}</td>
+            <td>{{ req.phone }}</td>
+            <td>{{ req.message }}</td>
+            <td>{{ req.created_at }}</td>
+            <td>{{ req.status }}</td>
+            <td>{{ req.files }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+          </html>
