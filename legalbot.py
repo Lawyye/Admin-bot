@@ -489,8 +489,15 @@ async def get_requests(request: Request):
         })
     return result
 
-# Добавьте остальные эндпоинты FastAPI здесь...
+import threading
+
+def run_bot():
+    import asyncio
+    asyncio.run(dp.start_polling(bot))
 
 if __name__ == "__main__":
+    # Запускаем aiogram polling в отдельном потоке
+    threading.Thread(target=run_bot, daemon=True).start()
+    # Запускаем FastAPI сервер
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
