@@ -214,6 +214,15 @@ def get_user_language(user_id: int) -> str:
     ).fetchone()
     return row[0] if row else None
 
+async def get_lang(state: FSMContext, user_id: int) -> str:
+    """Получить язык пользователя из состояния или базы данных"""
+    data = await state.get_data()
+    lang = data.get('lang')
+    if not lang:
+        lang = get_user_language(user_id) or 'ru'
+        await state.update_data(lang=lang)
+    return lang
+
 def get_menu_kb(user_id: int, lang: str = 'ru'):
     t = translations[lang]
     keyboard = [
@@ -244,50 +253,7 @@ def get_lang_kb():
         resize_keyboard=True
     )
 
-@dp.message(RequestForm.phone)
-async def get_phone(message: types.Message, state: FSMContext):
-    lang = await get_lang(state, message.from_user.id)
-    if message.text in [translations['ru']['back'], translations['en']['back']]:
-        await state.set_state(RequestForm.name)
-        await message.answer(translations[lang]['enter_name'], reply_markup=get_back_kb(lang))
-        return
-    if message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
-        await state.clear()
-        await start(message, state)
-        return
-    if not re.match(r"^\+?\d{10,15}$", message.text):
-        await message.answer(translations[lang]['invalid_phone'], reply_markup=get_back_kb(lang))
-        return
-    await state.update_data(phone=message.text)
-    await state.set_state(RequestForm.message)
-    await message.answer(translations[lang]['describe_problem'], reply_markup=get_back_kb(lang))
-
-@dp.message(RequestForm.message)
-async def after_problem(message: types.Message, state: FSMContext):
-    lang = await get_lang(state, message.from_user.id)
-    if message.text in [translations['ru']['back'], translations['en']['back']]:
-        await state.set_state(RequestForm.phone)
-        await message.answer(translations[lang]['enter_phone'], reply_markup=get_back_kb(lang))
-        return
-    if message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
-        await state.clear()
-        await start(message, state)
-        return
-    await state.update_data(message=message.text)
-    kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=translations[lang]['attach_yes']), KeyboardButton(text=translations[lang]['attach_no'])],
-            [KeyboardButton(text=translations[lang]['main_menu_btn'])]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-    await state.set_state(RequestForm.attach_doc_choice)
-    await message.answer(translations[lang]['attach_ask'], reply_markup=kb)
-
-     # ... (оставьте все импорты и инициализацию как есть выше) ...
-
-# --- Добавьте эту функцию для вывода просто главного меню ---
+# --- Функция для показа главного меню ---
 async def show_main_menu(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
     await message.answer(
@@ -295,6 +261,7 @@ async def show_main_menu(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(message.from_user.id, lang)
     )
 
+# --- СТАРТ ---
 @dp.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
     logging.info(f"User {message.from_user.id} state before clear: {await state.get_state()}")
@@ -313,13 +280,21 @@ async def start(message: types.Message, state: FSMContext):
         return
     lang = saved_lang
     await state.update_data(lang=lang)
-    await bot.send_photo(
-        chat_id=message.chat.id,
-        photo="https://i.imgur.com/HDFlGu5.png",
-        caption=translations[lang]['welcome'],
-        reply_markup=get_menu_kb(user_id, lang)
-    )
+    try:
+        await bot.send_photo(
+            chat_id=message.chat.id,
+            photo="https://i.imgur.com/HDFlGu5.png",
+            caption=translations[lang]['welcome'],
+            reply_markup=get_menu_kb(user_id, lang)
+        )
+    except Exception as e:
+        logging.error(f"Error sending photo: {e}")
+        await message.answer(
+            translations[lang]['welcome'],
+            reply_markup=get_menu_kb(user_id, lang)
+        )
 
+# --- ВЫБОР ЯЗЫКА ---
 @dp.message(RequestForm.language, F.text)
 async def choose_lang(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
@@ -369,7 +344,6 @@ async def choose_lang(message: types.Message, state: FSMContext):
             )
 
 # --- ВОЗВРАТ В ГЛАВНОЕ МЕНЮ/НАЗАД ---
-
 @dp.message(lambda m: m.text in [
     translations['ru']['main_menu_btn'], translations['en']['main_menu_btn'],
     translations['ru']['back'], translations['en']['back']
@@ -378,8 +352,14 @@ async def return_main_menu(message: types.Message, state: FSMContext):
     await state.clear()
     await show_main_menu(message, state)
 
-# --- ДАЛЕЕ во всех обработчиках состояний, где раньше вы делали await start(message, state) при возврате в главное меню или назад, ЗАМЕНИТЕ на await show_main_menu(message, state) ---
+# --- КОНСУЛЬТАЦИЯ - начало ---
+@dp.message(lambda m: m.text in [translations['ru']['consult_button'], translations['en']['consult_button']])
+async def consult_start(message: types.Message, state: FSMContext):
+    lang = await get_lang(state, message.from_user.id)
+    await state.set_state(RequestForm.name)
+    await message.answer(translations[lang]['enter_name'], reply_markup=get_back_kb(lang))
 
+# --- ИМЯ ---
 @dp.message(RequestForm.name)
 async def get_name(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
@@ -392,6 +372,7 @@ async def get_name(message: types.Message, state: FSMContext):
     await state.set_state(RequestForm.phone)
     await message.answer(translations[lang]['enter_phone'], reply_markup=get_back_kb(lang))
 
+# --- ТЕЛЕФОН ---
 @dp.message(RequestForm.phone)
 async def get_phone(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
@@ -410,6 +391,7 @@ async def get_phone(message: types.Message, state: FSMContext):
     await state.set_state(RequestForm.message)
     await message.answer(translations[lang]['describe_problem'], reply_markup=get_back_kb(lang))
 
+# --- СООБЩЕНИЕ ---
 @dp.message(RequestForm.message)
 async def after_problem(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
@@ -433,6 +415,7 @@ async def after_problem(message: types.Message, state: FSMContext):
     await state.set_state(RequestForm.attach_doc_choice)
     await message.answer(translations[lang]['attach_ask'], reply_markup=kb)
 
+# --- ВЫБОР ПРИКРЕПЛЕНИЯ ДОКУМЕНТОВ ---
 @dp.message(RequestForm.attach_doc_choice)
 async def attach_doc_choice(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
@@ -457,29 +440,46 @@ async def attach_doc_choice(message: types.Message, state: FSMContext):
     else:
         await message.answer(translations[lang]['not_added'])
 
+# --- ЗАВЕРШЕНИЕ ПРИКРЕПЛЕНИЯ ДОКУМЕНТОВ ---
 @dp.message(RequestForm.attach_docs, lambda m: m.text and m.text.lower() == "/done")
 async def done_docs(message: types.Message, state: FSMContext):
     await finish_request(message, state)
 
+# --- ОБРАБОТКА ДОКУМЕНТОВ ---
 @dp.message(RequestForm.attach_docs)
-async def attach_docs_menu(message: types.Message, state: FSMContext):
+async def attach_docs_handler(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
     if message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
         await state.clear()
         await show_main_menu(message, state)
         return
 
-# --- Остальные обработчики оставьте без изменений, если они не вызывают start(message, state) вручную ---
+    # Обработка документов
+    if message.document:
+        data = await state.get_data()
+        docs = data.get('documents', [])
+        
+        if len(docs) >= 3:
+            await message.answer(translations[lang]['attach_max'])
+            return
+            
+        docs.append({
+            'file_id': message.document.file_id,
+            'file_name': message.document.file_name or 'document'
+        })
+        await state.update_data(documents=docs)
+        await message.answer(
+            translations[lang]['attach_added'].format(message.document.file_name or 'document')
+        )
 
-# ... остальной ваш код ...
-
-
+# --- ЗАВЕРШЕНИЕ ЗАЯВКИ ---
 async def finish_request(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get('lang') or get_user_language(message.from_user.id) or 'ru'
     from datetime import datetime
     now = datetime.now().isoformat()
     user_id = message.from_user.id
+    
     with conn:
         conn.execute(
             "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)",
@@ -491,14 +491,18 @@ async def finish_request(message: types.Message, state: FSMContext):
                 "INSERT INTO documents (user_id, file_id, file_name, sent_at) VALUES (?, ?, ?, ?)",
                 (user_id, doc['file_id'], doc['file_name'], now)
             )
-    await bot.send_message(
-        ADMIN_CHAT_ID,
-        f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {data['message']}" +
-        ("\nДокументы: " + ", ".join(d['file_name'] for d in docs) if docs else "")
-    )
+    
+    # Отправка уведомления админу
+    admin_msg = f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {data['message']}"
+    if docs:
+        admin_msg += "\nДокументы: " + ", ".join(d['file_name'] for d in docs)
+    
+    await bot.send_message(ADMIN_CHAT_ID, admin_msg)
+    
     await message.answer(translations[lang]['thanks'], reply_markup=get_menu_kb(user_id, lang))
     await state.clear()
 
+# --- АДМИН ПАНЕЛЬ ---
 @dp.message(lambda m: m.text in [translations['ru']['admin_panel_button'], translations['en']['admin_panel_button']])
 async def admin_panel(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
@@ -511,10 +515,17 @@ async def admin_panel(message: types.Message, state: FSMContext):
     ])
     await message.answer("Откройте админ-панель:", reply_markup=kb)
 
+# --- FAQ ---
 @dp.message(lambda m: m.text in [translations['ru']['faq_button'], translations['en']['faq_button']])
 async def show_faq(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
     await message.answer(translations[lang]['faq_not_added'], reply_markup=get_menu_kb(message.from_user.id, lang))
+
+# --- КОНТАКТЫ ---
+@dp.message(lambda m: m.text in [translations['ru']['contacts_button'], translations['en']['contacts_button']])
+async def show_contacts(message: types.Message, state: FSMContext):
+    lang = await get_lang(state, message.from_user.id)
+    await message.answer(translations[lang]['contacts'], reply_markup=get_menu_kb(message.from_user.id, lang))
 
 # --- FastAPI Admin part ---
 
