@@ -574,10 +574,21 @@ async def on_shutdown():
         raise
 
 @app.post(WEBHOOK_PATH)
-async def bot_webhook(update: dict):
-    telegram_update = types.Update(**update)
-    await dp.feed_update(bot=bot, update=telegram_update)
-    return {"ok": True}
+async def bot_webhook(update: dict, request: Request):
+    try:
+        logging.info("Webhook received update: %s", update)
+        telegram_update = types.Update(**update)
+        await dp.feed_update(bot=bot, update=telegram_update)
+        return {"ok": True}
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        logging.error(f"Webhook processing error: {e}
+{tb}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal Server Error", "details": str(e)}
+        )
 
 # ---- ДОБАВЛЕН ЭХО-ХЭНДЛЕР В КОНЕЦ ФАЙЛА ----
 @dp.message()
