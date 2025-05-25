@@ -653,7 +653,7 @@ async def on_shutdown():
     await bot.delete_webhook()
     logging.info("Webhook удалён")
 
-@app.post("/webhook")
+@app.post(f"/webhook/{API_TOKEN}")
 async def telegram_webhook(request: Request):
     body = await request.body()
     update = types.Update.model_validate_json(body.decode())
