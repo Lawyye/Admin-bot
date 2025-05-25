@@ -239,30 +239,27 @@ async def start(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-@dp.message(RequestForm.language) 
-async def choose_lang(message: types.Message, state: FSMContext): 
-    logging.info(f"LANG SELECTED: {message.text}") 
+from aiogram import F
+
+@dp.message(RequestForm.language, F.text)
+async def choose_lang(message: types.Message, state: FSMContext):
+    logging.info(f"LANG SELECTED: {message.text}")
     text = message.text.strip()
-    
-    if text == translations['ru']['lang_ru']: 
-        lang = 'ru' 
-    elif text == translations['en']['lang_en']: 
-        lang = 'en' 
-    else: 
-        await message.answer( 
-            "Пожалуйста, выберите язык кнопкой / Please choose language with button.", 
-            reply_markup=get_lang_kb() 
-        ) 
+    if text == translations['ru']['lang_ru']:
+        lang = 'ru'
+    elif text == translations['en']['lang_en']:
+        lang = 'en'
+    else:
+        await message.answer(
+            "Пожалуйста, выберите язык кнопкой / Please choose language with button.",
+            reply_markup=get_lang_kb()
+        )
         return
 
-    # Сохраняем язык в базу данных
     user_id = message.from_user.id
     save_user_language(user_id, lang)
-    
-    # Очищаем состояние ПЕРЕД показом главного меню
-    await state.clear()
-    
-    # Показываем главное меню
+
+    await state.clear()  # очищаем состояние
     await bot.send_photo(
         chat_id=message.chat.id,
         photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
