@@ -550,6 +550,8 @@ async def reply_user(request: Request):
         logging.error(f"Send message error: {e}")
         return Response("Ошибка отправки", status_code=500)
 
+from urllib.parse import quote
+
 @app.get("/admin/download/{file_id}")
 async def download_file(file_id: str, request: Request):
     if not is_authenticated(request):
@@ -559,14 +561,21 @@ async def download_file(file_id: str, request: Request):
         file_url = f"https://api.telegram.org/file/bot{API_TOKEN}/{f.file_path}"
         async with httpx.AsyncClient() as client:
             r = await client.get(file_url)
+            if r.status_code != 200:
+                return Response("Ошибка загрузки файла из Telegram", status_code=502)
+
             filename = "document"
             c.execute("SELECT file_name FROM documents WHERE file_id=?", (file_id,))
             row = c.fetchone()
             if row:
                 filename = row[0]
+
+            # корректный заголовок с UTF-8
+            filename_utf8 = quote(filename)
             headers = {
-                "Content-Disposition": f'attachment; filename="{filename}"'
+                "Content-Disposition": f"attachment; filename*=UTF-8''{filename_utf8}"
             }
+
             return StreamingResponse(r.aiter_bytes(), headers=headers)
     except Exception as e:
         logging.error(f"Download error: {e}")
