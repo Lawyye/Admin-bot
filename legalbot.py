@@ -244,7 +244,7 @@ def get_lang_kb():
         resize_keyboard=True
     )
 
-translations[lang]['enter_phone'], reply_markup=get_back_kb(lang))
+translations[lang]['enter_phone'], reply_markup=get_back_kb(lang)
 
 @dp.message(RequestForm.phone)
 async def get_phone(message: types.Message, state: FSMContext):
