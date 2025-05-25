@@ -583,8 +583,7 @@ async def bot_webhook(update: dict, request: Request):
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
-        logging.error(f"Webhook processing error: {e}")
-{tb}")
+        logging.error(f"Webhook processing error: {e}\n{tb}")
         return JSONResponse(
             status_code=500,
             content={"error": "Internal Server Error", "details": str(e)}
