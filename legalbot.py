@@ -640,3 +640,22 @@ async def download_file(file_id: str, request: Request):
     except Exception as e:
         logging.error(f"Download error: {e}")
         return Response("Ошибка при загрузке файла", status_code=500)
+
+from fastapi import Request
+
+@app.on_event("startup")
+async def on_startup():
+    await bot.set_webhook(f"{APP_URL}/webhook")
+    logging.info("Webhook установлен")
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    await bot.delete_webhook()
+    logging.info("Webhook удалён")
+
+@app.post("/webhook")
+async def telegram_webhook(request: Request):
+    body = await request.body()
+    update = types.Update.model_validate_json(body.decode())
+    await dp.feed_update(bot, update)
+    return {"status": "ok"}
