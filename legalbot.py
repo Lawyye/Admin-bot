@@ -3,6 +3,8 @@ import logging
 import sqlite3
 import os
 import re
+from typing import Any, Awaitable, Callable, Dict
+
 from redis.asyncio.connection import ConnectionError as RedisConnectionError
 
 from dotenv import load_dotenv
@@ -17,9 +19,13 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
-from fastapi import FastAPI, Request, HTTPException, status
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import FastAPI, Request, HTTPException, status, Depends
+from fastapi.responses import JSONResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
+import secrets
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -35,21 +41,20 @@ if not REDIS_URL:
 
 # Webhook configuration
 WEBHOOK_PATH = f"/webhook/{API_TOKEN}"
-APP_URL = "https://web-production-bb98.up.railway.app"
+APP_URL = os.getenv("APP_URL", "https://web-production-bb98.up.railway.app")
 WEBHOOK_URL = APP_URL + WEBHOOK_PATH
 
 ADMIN_CHAT_ID_ENV = os.getenv("ADMIN_CHAT_ID")
 if not ADMIN_CHAT_ID_ENV:
     raise ValueError("ADMIN_CHAT_ID is not set")
 ADMIN_CHAT_ID = int(ADMIN_CHAT_ID_ENV)
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "secure-token-123")
 
 ADMIN_LOGIN1 = os.getenv("ADMIN_LOGIN1")
 ADMIN_PASSWORD1 = os.getenv("ADMIN_PASSWORD1")
 ADMIN_LOGIN2 = os.getenv("ADMIN_LOGIN2")
 ADMIN_PASSWORD2 = os.getenv("ADMIN_PASSWORD2")
 
-ADMINS = {1899643695, 1980103568}
+ADMINS = {1899643695, 1980103568}  # Можно расширить
 
 # Инициализация Redis
 try:
@@ -68,6 +73,11 @@ dp = Dispatcher(storage=storage)
 
 # Инициализация FastAPI
 app = FastAPI()
+
+# Для шаблонов и статики
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+security = HTTPBasic()
 
 # Инициализация базы данных
 conn = sqlite3.connect("bot.db", check_same_thread=False)
@@ -192,7 +202,6 @@ class RequestForm(StatesGroup):
     language = State()
 
 def save_user_language(user_id: int, lang: str):
-    """Сохраняем язык пользователя в базу данных"""
     with conn:
         conn.execute(
             "INSERT OR REPLACE INTO user_languages (user_id, language) VALUES (?, ?)",
@@ -200,7 +209,6 @@ def save_user_language(user_id: int, lang: str):
         )
 
 def get_user_language(user_id: int) -> str:
-    """Получаем язык пользователя из базы данных"""
     row = conn.execute(
         "SELECT language FROM user_languages WHERE user_id = ?", (user_id,)
     ).fetchone()
@@ -237,14 +245,12 @@ def get_lang_kb():
     )
 
 async def get_lang(state: FSMContext, user_id: int = None):
-    """Получаем язык из состояния или из базы данных"""
     data = await state.get_data()
     lang = data.get('lang')
     if not lang and user_id:
         lang = get_user_language(user_id)
     return lang or 'ru'
 
-# ---- ДОБАВЛЕН ЛОГ: состояние после установки ----
 @dp.message(CommandStart()) 
 async def start(message: types.Message, state: FSMContext): 
     user_id = message.from_user.id
@@ -252,7 +258,7 @@ async def start(message: types.Message, state: FSMContext):
     if not saved_lang:
         await state.set_state(RequestForm.language)
         current_state = await state.get_state()
-        logging.info(f"STATE SET AFTER START: {current_state}")  # ЛОГ ДОБАВЛЕН
+        logging.info(f"STATE SET AFTER START: {current_state}")
         await message.answer(
             translations['ru']['choose_language'], 
             reply_markup=get_lang_kb()
@@ -267,7 +273,6 @@ async def start(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-# ---- ДОБАВЛЕН ПОДРОБНЫЙ ЛОГ В ОБРАБОТЧИК ВЫБОРА ЯЗЫКА ----
 @dp.message(RequestForm.language, F.text)
 async def choose_lang(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
@@ -289,11 +294,10 @@ async def choose_lang(message: types.Message, state: FSMContext):
 
     user_id = message.from_user.id
     save_user_language(user_id, lang)
-    await state.update_data(lang=lang)  # Сохраняем язык в state перед очисткой
+    await state.update_data(lang=lang)
     await state.clear()
     
     try:
-        # Пробуем отправить фото и приветствие
         await bot.send_photo(
             chat_id=message.chat.id,
             photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
@@ -303,7 +307,6 @@ async def choose_lang(message: types.Message, state: FSMContext):
         logging.info(f"Successfully sent welcome message in {lang}")
     except Exception as e:
         logging.error(f"Error sending welcome message: {str(e)}")
-        # Если не удалось отправить фото, пробуем отправить только текст
         try:
             await message.answer(
                 translations[lang]['welcome'],
@@ -335,11 +338,8 @@ async def consultation(message: types.Message, state: FSMContext):
 @dp.message(RequestForm.name)
 async def get_name(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
-    if message.text in [translations['ru']['back'], translations['en']['back']]:
-        await state.clear()
-        await start(message, state)
-        return
-    if message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
+    if message.text in [translations['ru']['back'], translations['en']['back'],
+                        translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
         await state.clear()
         await start(message, state)
         return
@@ -358,7 +358,6 @@ async def get_phone(message: types.Message, state: FSMContext):
         await state.clear()
         await start(message, state)
         return
-    # Валидация телефона
     if not re.match(r"^\+?\d{10,15}$", message.text):
         await message.answer(translations[lang]['invalid_phone'], reply_markup=get_back_kb(lang))
         return
@@ -468,7 +467,7 @@ async def admin_panel(message: types.Message, state: FSMContext):
     if message.from_user.id not in ADMINS:
         await message.answer(translations[lang]['forbidden'])
         return
-    admin_url = "https://web-production-bb98.up.railway.app/admin"
+    admin_url = APP_URL + "/admin"
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Перейти в админку", url=admin_url)]
     ])
@@ -479,9 +478,7 @@ async def show_faq(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
     await message.answer(translations[lang]['faq_not_added'], reply_markup=get_menu_kb(message.from_user.id, lang))
 
-# --- FastAPI part ---
-
-app = FastAPI()
+# --- FastAPI Admin part ---
 
 class ReplyRequest(BaseModel):
     user_id: int
@@ -492,67 +489,87 @@ class StatusRequest(BaseModel):
     status: str
 
 def check_admin_credentials(login: str, password: str) -> bool:
-    return (login == ADMIN_LOGIN1 and password == ADMIN_PASSWORD1) or \
-           (login == ADMIN_LOGIN2 and password == ADMIN_PASSWORD2)
+    return (
+        (login == ADMIN_LOGIN1 and password == ADMIN_PASSWORD1) or
+        (login == ADMIN_LOGIN2 and password == ADMIN_PASSWORD2)
+    )
 
-def authorize(request: Request, token: str = None):
-    if not token or token != ADMIN_TOKEN:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+@app.get("/admin")
+async def admin_panel_page(request: Request, credentials: HTTPBasicCredentials = Depends(security)):
+    if not check_admin_credentials(credentials.username, credentials.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    c.execute("""
+        SELECT r.id, r.user_id, r.name, r.phone, r.message, r.created_at, r.status,
+               GROUP_CONCAT(d.file_name) as files
+        FROM requests r
+        LEFT JOIN documents d ON r.user_id = d.user_id AND r.created_at = d.sent_at
+        GROUP BY r.id
+        ORDER BY r.created_at DESC
+    """)
+    requests = [
+        {
+            'id': row[0], 'user_id': row[1], 'name': row[2], 'phone': row[3],
+            'message': row[4], 'created_at': row[5], 'status': row[6],
+            'files': row[7] or ""
+        }
+        for row in c.fetchall()
+    ]
+    return templates.TemplateResponse(
+        "admin.html",
+        {"request": request, "requests": requests}
+    )
 
-@app.post("/api/login")
-async def api_login(form: dict):
-    login = form.get("login")
-    password = form.get("password")
-    if check_admin_credentials(login, password):
-        return JSONResponse({"status": "ok", "token": ADMIN_TOKEN})
-    return JSONResponse({"status": "fail"}, status_code=401)
+@app.post("/admin/reply")
+async def admin_reply(reply: ReplyRequest, credentials: HTTPBasicCredentials = Depends(security)):
+    if not check_admin_credentials(credentials.username, credentials.password):
+        raise HTTPException(status_code=401)
+    try:
+        await bot.send_message(reply.user_id, reply.message)
+        return {"status": "success"}
+    except Exception as e:
+        logging.error(f"Error sending reply: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/")
-async def root():
-    return {"status": "ok"}
+@app.post("/admin/status")
+async def update_status(status_req: StatusRequest, credentials: HTTPBasicCredentials = Depends(security)):
+    if not check_admin_credentials(credentials.username, credentials.password):
+        raise HTTPException(status_code=401)
+    try:
+        c.execute("UPDATE requests SET status = ? WHERE id = ?", 
+                 (status_req.status, status_req.user_id))
+        conn.commit()
+        return {"status": "success"}
+    except Exception as e:
+        logging.error(f"Error updating status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/requests")
-async def get_requests(request: Request):
-    token = request.headers.get("X-Admin-Token")
-    authorize(request, token)
-    rows = conn.execute(
-        "SELECT id, user_id, name, phone, message, created_at, status FROM requests ORDER BY created_at DESC"
-    ).fetchall()
-    result = []
-    for r in rows:
-        docs = conn.execute(
-            "SELECT file_id, file_name, sent_at FROM documents WHERE user_id = ?", (r[1],)
-        ).fetchall()
-        doc_list = [
-            {"file_id": d[0], "file_name": d[1], "sent_at": d[2]}
-            for d in docs
-        ]
-        result.append({
-            "id": r[0],
-            "user_id": r[1],
-            "name": r[2],
-            "phone": r[3],
-            "message": r[4],
-            "created_at": r[5],
-            "status": r[6],
-            "documents": doc_list
-        })
-    return result
+# Webhook endpoint для Telegram
+@app.post(WEBHOOK_PATH)
+async def bot_webhook(update: dict):
+    try:
+        logging.info(f"Received webhook update: {update}")
+        if not update:
+            logging.error("Empty update received")
+            return {"error": "Empty update"}
+        telegram_update = types.Update(**update)
+        await dp.feed_update(bot=bot, update=telegram_update)
+        logging.info("Update processed successfully")
+        return {"ok": True}
+    except Exception as e:
+        logging.error(f"General webhook error: {str(e)}", exc_info=True)
+        return {"ok": False, "error": str(e)}
 
-# --- Webhook configuration ---
-WEBHOOK_PATH = f"/webhook/{API_TOKEN}"
-APP_URL = "https://web-production-bb98.up.railway.app"
-WEBHOOK_URL = APP_URL + WEBHOOK_PATH
-
+# Логирование событий, запуск вебхука и завершение
 @app.on_event("startup")
 async def on_startup():
     try:
-        # Проверяем подключение к Redis
         redis = storage.redis
         await redis.ping()
         logging.info("Successfully connected to Redis")
-        
-        # Настраиваем вебхук
         await bot.delete_webhook()
         await bot.set_webhook(WEBHOOK_URL)
         logging.info(f"Webhook set to: {WEBHOOK_URL}")
@@ -572,29 +589,6 @@ async def on_shutdown():
     except Exception as e:
         logging.error(f"Shutdown error: {e}")
         raise
-
-@app.post(WEBHOOK_PATH)
-async def bot_webhook(update: dict, request: Request):
-    try:
-        logging.info("Webhook received update: %s", update)
-        telegram_update = types.Update(**update)
-        await dp.feed_update(bot=bot, update=telegram_update)
-        return {"ok": True}
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        logging.error(f"Webhook processing error: {e}\n{tb}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Internal Server Error", "details": str(e)}
-        )
-
-# ---- ДОБАВЛЕН ЭХО-ХЭНДЛЕР В КОНЕЦ ФАЙЛА ----
-@dp.message()
-async def echo_all(message: types.Message, state: FSMContext):
-    current_state = await state.get_state()
-    logging.info(f"ECHO: {message.text}, STATE: {current_state}")
-    await message.answer(f"ECHO: {message.text}, STATE: {current_state}")
 
 if __name__ == "__main__":
     import uvicorn
