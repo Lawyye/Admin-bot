@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # Загружаем переменные из .env файла
 load_dotenv()
 
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
@@ -212,26 +212,22 @@ async def get_lang(state: FSMContext, user_id: int = None):
         lang = get_user_language(user_id)
     return lang or 'ru'
 
+# ---- ДОБАВЛЕН ЛОГ: состояние после установки ----
 @dp.message(CommandStart()) 
 async def start(message: types.Message, state: FSMContext): 
     user_id = message.from_user.id
-    
-    # Проверяем, есть ли сохраненный язык
     saved_lang = get_user_language(user_id)
-    
-    # Если язык не сохранен, предлагаем выбрать
     if not saved_lang:
         await state.set_state(RequestForm.language)
+        current_state = await state.get_state()
+        logging.info(f"STATE SET AFTER START: {current_state}")  # ЛОГ ДОБАВЛЕН
         await message.answer(
             translations['ru']['choose_language'], 
             reply_markup=get_lang_kb()
         )
         return
-    
-    # Используем сохраненный язык
     lang = saved_lang
     await state.update_data(lang=lang)
-    
     await bot.send_photo(
         chat_id=message.chat.id,
         photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
@@ -239,12 +235,12 @@ async def start(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-from aiogram import F
-
+# ---- ДОБАВЛЕН ПОДРОБНЫЙ ЛОГ В ОБРАБОТЧИК ВЫБОРА ЯЗЫКА ----
 @dp.message(RequestForm.language, F.text)
 async def choose_lang(message: types.Message, state: FSMContext):
-    logging.info(f"LANG HANDLER STATE: {await state.get_state()}")   # ДОБАВЛЕНО: лог состояния FSM
-    logging.info(f"LANG SELECTED: {message.text}")                  # Уже было, оставляем
+    current_state = await state.get_state()
+    logging.info(f"LANG HANDLER STATE: {current_state}")
+    logging.info(f"LANG SELECTED: {message.text}")
     text = message.text.strip()
     if text == translations['ru']['lang_ru']:
         lang = 'ru'
@@ -255,15 +251,14 @@ async def choose_lang(message: types.Message, state: FSMContext):
             "Пожалуйста, выберите язык кнопкой / Please choose language with button.",
             reply_markup=get_lang_kb()
         )
-        logging.info("Некорректный выбор языка, просим выбрать снова.") # ДОБАВЛЕНО
+        logging.info("Некорректный выбор языка, просим выбрать снова.")
         return
 
     user_id = message.from_user.id
     save_user_language(user_id, lang)
-    logging.info("Язык пользователя сохранён.")                       # ДОБАВЛЕНО
-
-    await state.clear()  # очищаем состояние
-    logging.info("Состояние FSM очищено.")                            # ДОБАВЛЕНО
+    logging.info("Язык пользователя сохранён.")
+    await state.clear()
+    logging.info("Состояние FSM очищено.")
 
     try:
         await bot.send_photo(
@@ -272,11 +267,10 @@ async def choose_lang(message: types.Message, state: FSMContext):
             caption=translations[lang]['welcome'],
             reply_markup=get_menu_kb(user_id, lang)
         )
-        logging.info("Фото с приветствием отправлено успешно.")       # ДОБАВЛЕНО
+        logging.info("Фото с приветствием отправлено успешно.")
     except Exception as e:
-        logging.error(f"Ошибка при отправке фото: {e}")              # ДОБАВЛЕНО
+        logging.error(f"Ошибка при отправке фото: {e}")
         await message.answer("Ошибка при отправке приветствия. Пожалуйста, напишите /start ещё раз.")
-
 
 @dp.message(lambda m: m.text in [translations['ru']['contacts_button'], translations['en']['contacts_button']])
 async def contacts(message: types.Message, state: FSMContext):
@@ -516,9 +510,16 @@ from aiogram.types import Update
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
     data = await request.json()
-    update = Update.model_validate(data)  # <-- вот эта строка важна!
+    update = Update.model_validate(data)
     await dp.feed_update(bot, update)
     return {"ok": True}
+
+# ---- ДОБАВЛЕН ЭХО-ХЭНДЛЕР В КОНЕЦ ФАЙЛА ----
+@dp.message()
+async def echo_all(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    logging.info(f"ECHO: {message.text}, STATE: {current_state}")
+    await message.answer(f"ECHO: {message.text}, STATE: {current_state}")
 
 if __name__ == "__main__":
     import uvicorn
