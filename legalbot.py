@@ -556,30 +556,50 @@ from urllib.parse import quote
 async def download_file(file_id: str, request: Request):
     if not is_authenticated(request):
         return RedirectResponse("/admin/login", status_code=302)
+
     try:
-        f = await bot.get_file(file_id)
-        file_url = f"https://api.telegram.org/file/bot{API_TOKEN}/{f.file_path}"
+        c.execute(
+            "SELECT file_name, file_path FROM documents WHERE file_id = ?",
+            (file_id,)
+        )
+        row = c.fetchone()
+
+        if not row:
+            return Response("Файл не найден", status_code=404)
+
+        filename, file_path = row
+
+        if not file_path:
+            return Response("file_path отсутствует", status_code=500)
+
+        file_url = (
+            f"https://api.telegram.org/file/bot{API_TOKEN}/{file_path}"
+        )
+
         async with httpx.AsyncClient() as client:
             r = await client.get(file_url)
+
             if r.status_code != 200:
-                return Response("Ошибка загрузки файла из Telegram", status_code=502)
+                return Response("Ошибка загрузки файла", status_code=502)
 
-            filename = "document"
-            c.execute("SELECT file_name FROM documents WHERE file_id=?", (file_id,))
-            row = c.fetchone()
-            if row:
-                filename = row[0]
-
-            # корректный заголовок с UTF-8
             filename_utf8 = quote(filename)
+
             headers = {
-                "Content-Disposition": f"attachment; filename*=UTF-8''{filename_utf8}"
+                "Content-Disposition": (
+                    f"attachment; filename*=UTF-8''{filename_utf8}"
+                )
             }
 
-            return StreamingResponse(r.aiter_bytes(), headers=headers)
+            return StreamingResponse(
+                r.aiter_bytes(),
+                headers=headers
+            )
+
     except Exception as e:
         logging.error(f"Download error: {e}")
         return Response("Ошибка скачивания", status_code=500)
+
+
 
 # === WEBHOOK for Telegram (если нужно) ===
 WEBHOOK_PATH = f"/webhook/{API_TOKEN}"
