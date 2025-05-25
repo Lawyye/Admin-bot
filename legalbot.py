@@ -46,7 +46,6 @@ storage = RedisStorage.from_url(
 )
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=storage)
-app = FastAPI()
 
 # === DB INIT ===
 conn = sqlite3.connect("bot.db", check_same_thread=False)
