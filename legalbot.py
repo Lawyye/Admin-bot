@@ -304,7 +304,7 @@ async def choose_lang(message: types.Message, state: FSMContext):
     try:
         await bot.send_photo(
             chat_id=message.chat.id,
-            photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
+            photo="https://imgur.com/a/QSMiNeB",
             caption=translations[lang]['welcome'],
             reply_markup=get_menu_kb(user_id, lang)
         )
