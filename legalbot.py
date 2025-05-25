@@ -244,112 +244,7 @@ def get_lang_kb():
         resize_keyboard=True
     )
 
-async def get_lang(state: FSMContext, user_id: int = None):
-    data = await state.get_data()
-    lang = data.get('lang')
-    if not lang and user_id:
-        lang = get_user_language(user_id)
-    return lang or 'ru'
-
-@dp.message(CommandStart()) 
-async def start(message: types.Message, state: FSMContext):
-    logging.info(f"User {message.from_user.id} state before clear: {await state.get_state()}")
-    await state.clear()
-    logging.info(f"User {message.from_user.id} state after clear: {await state.get_state()}")
-    # ... остальной код ...
-    user_id = message.from_user.id
-    saved_lang = get_user_language(user_id)
-    if not saved_lang:
-        await state.set_state(RequestForm.language)
-        current_state = await state.get_state()
-        logging.info(f"STATE SET AFTER START: {current_state}")
-        await message.answer(
-            translations['ru']['choose_language'], 
-            reply_markup=get_lang_kb()
-        )
-        return
-    lang = saved_lang
-    await state.update_data(lang=lang)
-    await bot.send_photo(
-        chat_id=message.chat.id,
-        photo="https://i.imgur.com/HDFlGu5.png",
-        caption=translations[lang]['welcome'],
-        reply_markup=get_menu_kb(user_id, lang)
-    )
-
-@dp.message(RequestForm.language, F.text)
-async def choose_lang(message: types.Message, state: FSMContext):
-    current_state = await state.get_state()
-    logging.info(f"LANG HANDLER STATE: {current_state}")
-    logging.info(f"LANG SELECTED: {message.text}")
-    text = message.text.strip()
-    
-    if text == translations['ru']['lang_ru']:
-        lang = 'ru'
-    elif text == translations['en']['lang_en']:
-        lang = 'en'
-    else:
-        await message.answer(
-            "Пожалуйста, выберите язык кнопкой / Please choose language with button.",
-            reply_markup=get_lang_kb()
-        )
-        logging.info("Некорректный выбор языка, просим выбрать снова.")
-        return
-
-    user_id = message.from_user.id
-    save_user_language(user_id, lang)
-    await state.update_data(lang=lang)
-    await state.clear()
-    
-    try:
-        await bot.send_photo(
-            chat_id=message.chat.id,
-            photo="https://i.imgur.com/HDFlGu5.png",
-            caption=translations[lang]['welcome'],
-            reply_markup=get_menu_kb(user_id, lang)
-        )
-        logging.info(f"Successfully sent welcome message in {lang}")
-    except Exception as e:
-        logging.error(f"Error sending welcome message: {str(e)}")
-        try:
-            await message.answer(
-                translations[lang]['welcome'],
-                reply_markup=get_menu_kb(user_id, lang)
-            )
-            logging.info("Sent welcome message without photo")
-        except Exception as e2:
-            logging.error(f"Error sending text-only welcome: {str(e2)}")
-            await message.answer(
-                "Ошибка при отправке приветствия. Пожалуйста, напишите /start ещё раз.",
-                reply_markup=ReplyKeyboardMarkup(
-                    keyboard=[[KeyboardButton(text="/start")]],
-                    resize_keyboard=True
-                )
-            )
-
-@dp.message(lambda m: m.text in [translations['ru']['contacts_button'], translations['en']['contacts_button']])
-async def contacts(message: types.Message, state: FSMContext):
-    lang = await get_lang(state, message.from_user.id)
-    await message.answer(translations[lang]['contacts'], reply_markup=get_menu_kb(message.from_user.id, lang))
-
-@dp.message(lambda m: m.text in [translations['ru']['consult_button'], translations['en']['consult_button']])
-async def consultation(message: types.Message, state: FSMContext):
-    lang = await get_lang(state, message.from_user.id)
-    await state.set_state(RequestForm.name)
-    await state.update_data(user_id=message.from_user.id, lang=lang)
-    await message.answer(translations[lang]['enter_name'], reply_markup=get_back_kb(lang))
-
-@dp.message(RequestForm.name)
-async def get_name(message: types.Message, state: FSMContext):
-    lang = await get_lang(state, message.from_user.id)
-    if message.text in [translations['ru']['back'], translations['en']['back'],
-                        translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
-        await state.clear()
-        await start(message, state)
-        return
-    await state.update_data(name=message.text)
-    await state.set_state(RequestForm.phone)
-    await message.answer(translations[lang]['enter_phone'], reply_markup=get_back_kb(lang))
+translations[lang]['enter_phone'], reply_markup=get_back_kb(lang))
 
 @dp.message(RequestForm.phone)
 async def get_phone(message: types.Message, state: FSMContext):
@@ -392,6 +287,154 @@ async def after_problem(message: types.Message, state: FSMContext):
     await state.set_state(RequestForm.attach_doc_choice)
     await message.answer(translations[lang]['attach_ask'], reply_markup=kb)
 
+     # ... (оставьте все импорты и инициализацию как есть выше) ...
+
+# --- Добавьте эту функцию для вывода просто главного меню ---
+async def show_main_menu(message: types.Message, state: FSMContext):
+    lang = await get_lang(state, message.from_user.id)
+    await message.answer(
+        translations[lang]['menu_caption'],
+        reply_markup=get_menu_kb(message.from_user.id, lang)
+    )
+
+@dp.message(CommandStart())
+async def start(message: types.Message, state: FSMContext):
+    logging.info(f"User {message.from_user.id} state before clear: {await state.get_state()}")
+    await state.clear()
+    logging.info(f"User {message.from_user.id} state after clear: {await state.get_state()}")
+    user_id = message.from_user.id
+    saved_lang = get_user_language(user_id)
+    if not saved_lang:
+        await state.set_state(RequestForm.language)
+        current_state = await state.get_state()
+        logging.info(f"STATE SET AFTER START: {current_state}")
+        await message.answer(
+            translations['ru']['choose_language'],
+            reply_markup=get_lang_kb()
+        )
+        return
+    lang = saved_lang
+    await state.update_data(lang=lang)
+    await bot.send_photo(
+        chat_id=message.chat.id,
+        photo="https://i.imgur.com/HDFlGu5.png",
+        caption=translations[lang]['welcome'],
+        reply_markup=get_menu_kb(user_id, lang)
+    )
+
+@dp.message(RequestForm.language, F.text)
+async def choose_lang(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    logging.info(f"LANG HANDLER STATE: {current_state}")
+    logging.info(f"LANG SELECTED: {message.text}")
+    text = message.text.strip()
+    if text == translations['ru']['lang_ru']:
+        lang = 'ru'
+    elif text == translations['en']['lang_en']:
+        lang = 'en'
+    else:
+        await message.answer(
+            "Пожалуйста, выберите язык кнопкой / Please choose language with button.",
+            reply_markup=get_lang_kb()
+        )
+        logging.info("Некорректный выбор языка, просим выбрать снова.")
+        return
+
+    user_id = message.from_user.id
+    save_user_language(user_id, lang)
+    await state.update_data(lang=lang)
+    await state.clear()
+    try:
+        await bot.send_photo(
+            chat_id=message.chat.id,
+            photo="https://i.imgur.com/HDFlGu5.png",
+            caption=translations[lang]['welcome'],
+            reply_markup=get_menu_kb(user_id, lang)
+        )
+        logging.info(f"Successfully sent welcome message in {lang}")
+    except Exception as e:
+        logging.error(f"Error sending welcome message: {str(e)}")
+        try:
+            await message.answer(
+                translations[lang]['welcome'],
+                reply_markup=get_menu_kb(user_id, lang)
+            )
+            logging.info("Sent welcome message without photo")
+        except Exception as e2:
+            logging.error(f"Error sending text-only welcome: {str(e2)}")
+            await message.answer(
+                "Ошибка при отправке приветствия. Пожалуйста, напишите /start ещё раз.",
+                reply_markup=ReplyKeyboardMarkup(
+                    keyboard=[[KeyboardButton(text="/start")]],
+                    resize_keyboard=True
+                )
+            )
+
+# --- ВОЗВРАТ В ГЛАВНОЕ МЕНЮ/НАЗАД ---
+
+@dp.message(lambda m: m.text in [
+    translations['ru']['main_menu_btn'], translations['en']['main_menu_btn'],
+    translations['ru']['back'], translations['en']['back']
+])
+async def return_main_menu(message: types.Message, state: FSMContext):
+    await state.clear()
+    await show_main_menu(message, state)
+
+# --- ДАЛЕЕ во всех обработчиках состояний, где раньше вы делали await start(message, state) при возврате в главное меню или назад, ЗАМЕНИТЕ на await show_main_menu(message, state) ---
+
+@dp.message(RequestForm.name)
+async def get_name(message: types.Message, state: FSMContext):
+    lang = await get_lang(state, message.from_user.id)
+    if message.text in [translations['ru']['back'], translations['en']['back'],
+                        translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
+        await state.clear()
+        await show_main_menu(message, state)
+        return
+    await state.update_data(name=message.text)
+    await state.set_state(RequestForm.phone)
+    await message.answer(translations[lang]['enter_phone'], reply_markup=get_back_kb(lang))
+
+@dp.message(RequestForm.phone)
+async def get_phone(message: types.Message, state: FSMContext):
+    lang = await get_lang(state, message.from_user.id)
+    if message.text in [translations['ru']['back'], translations['en']['back']]:
+        await state.set_state(RequestForm.name)
+        await message.answer(translations[lang]['enter_name'], reply_markup=get_back_kb(lang))
+        return
+    if message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
+        await state.clear()
+        await show_main_menu(message, state)
+        return
+    if not re.match(r"^\+?\d{10,15}$", message.text):
+        await message.answer(translations[lang]['invalid_phone'], reply_markup=get_back_kb(lang))
+        return
+    await state.update_data(phone=message.text)
+    await state.set_state(RequestForm.message)
+    await message.answer(translations[lang]['describe_problem'], reply_markup=get_back_kb(lang))
+
+@dp.message(RequestForm.message)
+async def after_problem(message: types.Message, state: FSMContext):
+    lang = await get_lang(state, message.from_user.id)
+    if message.text in [translations['ru']['back'], translations['en']['back']]:
+        await state.set_state(RequestForm.phone)
+        await message.answer(translations[lang]['enter_phone'], reply_markup=get_back_kb(lang))
+        return
+    if message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
+        await state.clear()
+        await show_main_menu(message, state)
+        return
+    await state.update_data(message=message.text)
+    kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=translations[lang]['attach_yes']), KeyboardButton(text=translations[lang]['attach_no'])],
+            [KeyboardButton(text=translations[lang]['main_menu_btn'])]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    await state.set_state(RequestForm.attach_doc_choice)
+    await message.answer(translations[lang]['attach_ask'], reply_markup=kb)
+
 @dp.message(RequestForm.attach_doc_choice)
 async def attach_doc_choice(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
@@ -412,21 +455,9 @@ async def attach_doc_choice(message: types.Message, state: FSMContext):
         await finish_request(message, state)
     elif message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
         await state.clear()
-        await start(message, state)
+        await show_main_menu(message, state)
     else:
         await message.answer(translations[lang]['not_added'])
-
-@dp.message(RequestForm.attach_docs, lambda m: m.document)
-async def handle_docs(message: types.Message, state: FSMContext):
-    lang = await get_lang(state, message.from_user.id)
-    data = await state.get_data()
-    docs = data.get('documents', [])
-    if len(docs) >= 3:
-        await message.answer(translations[lang]['attach_max'])
-        return
-    docs.append({"file_id": message.document.file_id, "file_name": message.document.file_name})
-    await state.update_data(documents=docs)
-    await message.answer(translations[lang]['attach_added'].format(message.document.file_name))
 
 @dp.message(RequestForm.attach_docs, lambda m: m.text and m.text.lower() == "/done")
 async def done_docs(message: types.Message, state: FSMContext):
@@ -437,8 +468,13 @@ async def attach_docs_menu(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
     if message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
         await state.clear()
-        await start(message, state)
+        await show_main_menu(message, state)
         return
+
+# --- Остальные обработчики оставьте без изменений, если они не вызывают start(message, state) вручную ---
+
+# ... остальной ваш код ...
+
 
 async def finish_request(message: types.Message, state: FSMContext):
     data = await state.get_data()
