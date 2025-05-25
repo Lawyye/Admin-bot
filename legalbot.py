@@ -387,25 +387,34 @@ async def done_docs(message: types.Message, state: FSMContext):
 @dp.message(RequestForm.attach_docs)
 async def attach_docs_handler(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
+
     if message.text in [translations['ru']['main_menu_btn'], translations['en']['main_menu_btn']]:
         await state.clear()
         await show_main_menu(message, state)
         return
 
     if message.document:
+        file_id = message.document.file_id
+        file_name = message.document.file_name or 'document'
+
+        tg_file = await bot.get_file(file_id)
+        file_path = tg_file.file_path
+
         data = await state.get_data()
         docs = data.get('documents', [])
         if len(docs) >= 3:
             await message.answer(translations[lang]['attach_max'])
             return
         docs.append({
-            'file_id': message.document.file_id,
-            'file_name': message.document.file_name or 'document'
+            'file_id': file_id,
+            'file_name': file_name,
+            'file_path': file_path
         })
         await state.update_data(documents=docs)
         await message.answer(
-            translations[lang]['attach_added'].format(message.document.file_name or 'document')
+            translations[lang]['attach_added'].format(file_name)
         )
+
 
 async def finish_request(message: types.Message, state: FSMContext):
     data = await state.get_data()
