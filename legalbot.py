@@ -243,7 +243,8 @@ from aiogram import F
 
 @dp.message(RequestForm.language, F.text)
 async def choose_lang(message: types.Message, state: FSMContext):
-    logging.info(f"LANG SELECTED: {message.text}")
+    logging.info(f"LANG HANDLER STATE: {await state.get_state()}")   # ДОБАВЛЕНО: лог состояния FSM
+    logging.info(f"LANG SELECTED: {message.text}")                  # Уже было, оставляем
     text = message.text.strip()
     if text == translations['ru']['lang_ru']:
         lang = 'ru'
@@ -254,18 +255,28 @@ async def choose_lang(message: types.Message, state: FSMContext):
             "Пожалуйста, выберите язык кнопкой / Please choose language with button.",
             reply_markup=get_lang_kb()
         )
+        logging.info("Некорректный выбор языка, просим выбрать снова.") # ДОБАВЛЕНО
         return
 
     user_id = message.from_user.id
     save_user_language(user_id, lang)
+    logging.info("Язык пользователя сохранён.")                       # ДОБАВЛЕНО
 
     await state.clear()  # очищаем состояние
-    await bot.send_photo(
-        chat_id=message.chat.id,
-        photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
-        caption=translations[lang]['welcome'],
-        reply_markup=get_menu_kb(user_id, lang)
-    )
+    logging.info("Состояние FSM очищено.")                            # ДОБАВЛЕНО
+
+    try:
+        await bot.send_photo(
+            chat_id=message.chat.id,
+            photo="AgACAgIAAxkBAAE1YB1oMkDR4lZwFBBjnUnPc4tHstWRRwAC4esxG9dOmUnr1RkgaeZ_hQEAAwIAA3kAAzYE",
+            caption=translations[lang]['welcome'],
+            reply_markup=get_menu_kb(user_id, lang)
+        )
+        logging.info("Фото с приветствием отправлено успешно.")       # ДОБАВЛЕНО
+    except Exception as e:
+        logging.error(f"Ошибка при отправке фото: {e}")              # ДОБАВЛЕНО
+        await message.answer("Ошибка при отправке приветствия. Пожалуйста, напишите /start ещё раз.")
+
 
 @dp.message(lambda m: m.text in [translations['ru']['contacts_button'], translations['en']['contacts_button']])
 async def contacts(message: types.Message, state: FSMContext):
