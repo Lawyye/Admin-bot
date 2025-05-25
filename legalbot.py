@@ -252,8 +252,11 @@ async def get_lang(state: FSMContext, user_id: int = None):
     return lang or 'ru'
 
 @dp.message(CommandStart()) 
-async def start(message: types.Message, state: FSMContext): 
+async def start(message: types.Message, state: FSMContext):
+    logging.info(f"User {message.from_user.id} state before clear: {await state.get_state()}")
     await state.clear()
+    logging.info(f"User {message.from_user.id} state after clear: {await state.get_state()}")
+    # ... остальной код ...
     user_id = message.from_user.id
     saved_lang = get_user_language(user_id)
     if not saved_lang:
