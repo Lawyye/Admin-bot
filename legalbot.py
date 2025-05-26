@@ -519,6 +519,8 @@ def get_requests_data(search: Optional[str]=None, status_f: Optional[str]=None):
             "id": row[0], "user_id": row[1], "name": row[2], "phone": row[3],
             "message": row[4], "created_at": row[5], "status": row[6], "documents": docs
         })
+        print("📦 Возвращаем заявки:", len(reqs))
+    
     return reqs
 
 @app.get("/admin/login")
@@ -550,7 +552,11 @@ def admin_panel(request: Request):
 @app.get("/admin/api/requests")
 def api_requests(request: Request, search: Optional[str]=None, status_f: Optional[str]=None):
     if not is_authenticated(request):
+        print("⛔ НЕАВТОРИЗОВАННЫЙ ДОСТУП К /admin/api/requests")
         return JSONResponse({"error": "unauthorized"}, status_code=403)
+    
+    print("✅ ЗАПРОС К /admin/api/requests ОТ АВТОРИЗОВАННОГО ПОЛЬЗОВАТЕЛЯ")
+    
     data = get_requests_data(search, status_f)
     return {"requests": data}
 
