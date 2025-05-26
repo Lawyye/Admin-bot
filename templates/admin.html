@@ -612,27 +612,16 @@
         }
 
         async function loadRequests() {
-            showLoading(true);
-            
-            try {
-                // Симуляция задержки загрузки
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
-                // Тестовые данные
-                const testData = [
-                    {
-                        id: 1,
-                        date: '2025-05-26 10:30',
-                        name: 'Иван Петрович Иванов',
-                        phone: '+7 (999) 123-45-67',
-                        message: 'Нужна консультация по трудовому праву. Работодатель нарушает условия трудового договора.',
-                        status: 'new',
-                        documents: 2
-                    },
-                    {
-                        id: 2,
-                        date: '2025-05-26 09:15',
-                        name: 'Мария Александровна Петрова',
-                        phone: '+7 (888) 765-43-21',
-                        message: 'Вопрос по договору купли-продажи квартиры. Нужна проверка документов.',
-          
+    showLoading(true);
+    try {
+        const res = await fetch('/admin/api/requests');
+        const data = await res.json();
+        allRequests = data.requests;
+        renderRequests();
+        updateStats();
+    } catch (e) {
+        alert("Ошибка загрузки заявок: " + e.message);
+    } finally {
+        showLoading(false);
+    }
+        }
