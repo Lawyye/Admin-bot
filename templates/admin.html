@@ -555,80 +555,80 @@
     </div>
 
     <script>
-        let allRequests = [];
-        let currentFilter = { search: '', status: '' };
+    let allRequests = [];
+    let currentFilter = { search: '', status: '' };
 
-        // Инициализация
-        window.addEventListener("load", () => {
-            initializeTheme();
-            loadRequests();
-            setupEventListeners();
+    window.addEventListener("load", () => {
+        initializeTheme();
+        loadRequests();
+        setupEventListeners();
+    });
+
+    function initializeTheme() {
+        const savedTheme = localStorage.getItem("theme");
+        const isDark = savedTheme === "dark" || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (isDark) {
+            document.body.classList.add("dark-theme");
+            document.getElementById("theme-icon").textContent = "☀️";
+        }
+    }
+
+    function setupEventListeners() {
+        document.addEventListener('click', function(event) {
+            const menu = document.getElementById('mobileMenu');
+            const toggle = document.querySelector('.mobile-menu-toggle');
+            if (!menu.contains(event.target) && !toggle.contains(event.target)) {
+                menu.classList.remove('active');
+            }
         });
 
-        function initializeTheme() {
-            const savedTheme = localStorage.getItem("theme");
-            const isDark = savedTheme === "dark" || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            
-            if (isDark) {
-                document.body.classList.add("dark-theme");
-                document.getElementById("theme-icon").textContent = "☀️";
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeReplyModal();
             }
+        });
+
+        if (window.innerWidth > 768) {
+            const logout = document.getElementById('desktop-logout');
+            if (logout) logout.style.display = 'block';
         }
-
-        function setupEventListeners() {
-            // Закрытие мобильного меню при клике вне его
-            document.addEventListener('click', function(event) {
-                const menu = document.getElementById('mobileMenu');
-                const toggle = document.querySelector('.mobile-menu-toggle');
-                
-                if (!menu.contains(event.target) && !toggle.contains(event.target)) {
-                    menu.classList.remove('active');
-                }
-            });
-
-            // Закрытие модального окна по Escape
-            document.addEventListener('keydown', function(event) {
-                if (event.key === 'Escape') {
-                    closeReplyModal();
-                }
-            });
-
-            // Показать кнопку выхода на десктопе
-            if (window.innerWidth > 768) {
-                document.getElementById('desktop-logout').style.display = 'block';
-            }
-        }
-
-        function toggleTheme() {
-            document.body.classList.toggle("dark-theme");
-            const isDark = document.body.classList.contains("dark-theme");
-            localStorage.setItem("theme", isDark ? "dark" : "light");
-            document.getElementById("theme-icon").textContent = isDark ? "☀️" : "🌙";
-        }
-
-        function toggleMobileMenu() {
-            const menu = document.getElementById('mobileMenu');
-            menu.classList.toggle('active');
-        }
-
-        async function loadRequests() {
-    showLoading(true);
-    try {
-        const res = await fetch('/admin/api/requests');
-
-        if (res.status === 403) {
-            alert("⛔ Вы не авторизованы. Пожалуйста, войдите заново.");
-            window.location.href = "/admin/login";
-            return;
-        }
-
-        const data = await res.json();
-        allRequests = data.requests;
-        renderRequests();
-        updateStats();
-    } catch (e) {
-        alert("Ошибка загрузки заявок: " + e.message);
-    } finally {
-        showLoading(false);
     }
-}
+
+    function toggleTheme() {
+        document.body.classList.toggle("dark-theme");
+        const isDark = document.body.classList.contains("dark-theme");
+        localStorage.setItem("theme", isDark ? "dark" : "light");
+        document.getElementById("theme-icon").textContent = isDark ? "☀️" : "🌙";
+    }
+
+    function toggleMobileMenu() {
+        const menu = document.getElementById('mobileMenu');
+        menu.classList.toggle('active');
+    }
+
+    async function loadRequests() {
+        showLoading(true);
+        try {
+            const res = await fetch('/admin/api/requests');
+            if (res.status === 403) {
+                alert("⛔ Вы не авторизованы. Пожалуйста, войдите заново.");
+                window.location.href = "/admin/login";
+                return;
+            }
+            const data = await res.json();
+            allRequests = data.requests;
+            renderRequests();
+            updateStats();
+        } catch (e) {
+            alert("Ошибка загрузки заявок: " + e.message);
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    function showLoading(x) {}
+    function renderRequests() {}
+    function updateStats() {}
+    function closeReplyModal() {}
+    </script>
+    
