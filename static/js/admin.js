@@ -26,9 +26,9 @@ document.getElementById('mobile-status-filter').addEventListener('change', funct
 
 setInterval(fetchRequests, 5000); window.addEventListener("load", fetchRequests);
 
-function toggleMobileMenu() { const menu = document.getElementById("mobileMenu"); if (menu) { menu.classList.toggle("active"); console.log("toggleMobileMenu вызвана"); } else { console.error("Не найден #mobileMenu"); } }
+// === MOBILE MENU TOGGLE === function toggleMobileMenu() { const menu = document.getElementById("mobileMenu"); const btn = document.querySelector(".mobile-menu-toggle"); if (menu && btn) { const isOpen = menu.classList.toggle("active"); btn.textContent = isOpen ? "✖" : "☰"; } }
 
-window.toggleMobileMenu = toggleMobileMenu;
+window.addEventListener("DOMContentLoaded", () => { const btn = document.querySelector(".mobile-menu-toggle"); if (btn) btn.addEventListener("click", toggleMobileMenu); });
 
-console.log("JS загружен"); document.querySelector(".mobile-menu-toggle")?.addEventListener("click", () => { console.log("Нажали на гамбургер!"); });
+console.log("JS загружен");
 
