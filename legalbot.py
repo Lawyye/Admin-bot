@@ -428,30 +428,7 @@ async def attach_docs_handler(message: types.Message, state: FSMContext):
         )
 
 
-async def finish_request(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get('lang') or get_user_language(message.from_user.id) or 'ru'
-    from datetime import datetime
-    now = datetime.now().isoformat()
-    user_id = message.from_user.id
-    with conn:
-        c.execute(
-            "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)",
-            (user_id, data['name'], data['phone'], data['message'], now, 'new')
-        )
-        req_id = c.lastrowid
-        docs = data.get('documents', [])
-        for doc in docs:
-            c.execute(
-                "INSERT INTO documents (request_id, file_id, file_name, sent_at) VALUES (?, ?, ?, ?)",
-                (req_id, doc['file_id'], doc['file_name'], now)
-            )
-    admin_msg = f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {data['message']}"
-    if docs:
-        admin_msg += "\nДокументы: " + ", ".join(d['file_name'] for d in docs)
-    await bot.send_message(ADMIN_CHAT_ID, admin_msg)
-    await message.answer(translations[lang]['thanks'], reply_markup=get_menu_kb(user_id, lang))
-    await state.clear()
+
 
 @dp.message(lambda m: m.text in [translations['ru']['admin_panel_button'], translations['en']['admin_panel_button']])
 async def admin_panel(message: types.Message, state: FSMContext):
@@ -469,6 +446,37 @@ async def admin_panel(message: types.Message, state: FSMContext):
 async def show_faq(message: types.Message, state: FSMContext):
     lang = await get_lang(state, message.from_user.id)
     await message.answer(translations[lang]['faq_not_added'], reply_markup=get_menu_kb(message.from_user.id, lang))
+
+async def finish_request(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get('lang') or get_user_language(message.from_user.id) or 'ru'
+    from datetime import datetime
+    now = datetime.now().isoformat()
+    user_id = message.from_user.id
+
+    with conn:
+        print("‼️ ЗАЯВКА ЗАПИСЫВАЕТСЯ В БАЗУ:", data['name'], data['phone'], data['message'])
+
+        c.execute(
+            "INSERT INTO requests (user_id, name, phone, message, created_at, status) VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, data['name'], data['phone'], data['message'], now, 'new')
+        )
+        req_id = c.lastrowid
+        docs = data.get('documents', [])
+        for doc in docs:
+            c.execute(
+                "INSERT INTO documents (request_id, file_id, file_name, sent_at) VALUES (?, ?, ?, ?)",
+                (req_id, doc['file_id'], doc['file_name'], now)
+            )
+
+    print("✅ ЗАЯВКА СОХРАНЕНА")
+
+    admin_msg = f"Новая заявка:\nИмя: {data['name']}\nТел: {data['phone']}\nПроблема: {data['message']}"
+    if docs:
+        admin_msg += "\nДокументы: " + ", ".join(d['file_name'] for d in docs)
+    await bot.send_message(ADMIN_CHAT_ID, admin_msg)
+    await message.answer(translations[lang]['thanks'], reply_markup=get_menu_kb(user_id, lang))
+    await state.clear()
 
 @dp.message(lambda m: m.text in [translations['ru']['contacts_button'], translations['en']['contacts_button']])
 async def show_contacts(message: types.Message, state: FSMContext):
