@@ -62,6 +62,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # === DB INIT ===
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 c = conn.cursor()
+print("‼️ ЗАЯВКА ЗАПИСЫВАЕТСЯ В БАЗУ:", name, phone, message)
 c.execute("""
     CREATE TABLE IF NOT EXISTS requests (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,6 +87,7 @@ c.execute("""
         language TEXT DEFAULT 'ru'
     )""")
 conn.commit()
+print("✅ ЗАЯВКА СОХРАНЕНА")
 
 # === LANG ===
 translations = {
