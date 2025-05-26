@@ -24,7 +24,7 @@ document.getElementById('mobile-search').addEventListener('input', function () {
 
 document.getElementById('mobile-status-filter').addEventListener('change', function () { filterStatus = this.value; fetchRequests(); });
 
-setInterval(fetchRequests, 5000); window.onload = fetchRequests;
+// === MOBILE MENU TOGGLE === document.addEventListener("DOMContentLoaded", () => { const toggleBtn = document.getElementById("mobile-toggle-btn"); if (toggleBtn) { toggleBtn.addEventListener("click", () => { const menu = document.getElementById("mobileMenu"); menu.classList.toggle("active"); }); } });
 
-// === MOBILE MENU TOGGLE === function toggleMobileMenu() { const menu = document.getElementById("mobileMenu"); menu.classList.toggle("active"); }
+setInterval(fetchRequests, 5000); window.onload = fetchRequests;
 
