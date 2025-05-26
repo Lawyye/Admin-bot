@@ -26,5 +26,6 @@ document.getElementById('mobile-status-filter').addEventListener('change', funct
 
 // === MOBILE MENU TOGGLE === document.addEventListener("DOMContentLoaded", () => { const toggleBtn = document.getElementById("mobile-toggle-btn"); if (toggleBtn) { toggleBtn.addEventListener("click", () => { const menu = document.getElementById("mobileMenu"); menu.classList.toggle("active"); }); } });
 
-setInterval(fetchRequests, 5000); window.onload = fetchRequests;
+setInterval(fetchRequests, 5000); window.onload = fetchRequests; 
 
+window.toggleMobileMenu = toggleMobileMenu;
