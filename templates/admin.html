@@ -615,6 +615,13 @@
     showLoading(true);
     try {
         const res = await fetch('/admin/api/requests');
+
+        if (res.status === 403) {
+            alert("⛔ Вы не авторизованы. Пожалуйста, войдите заново.");
+            window.location.href = "/admin/login";
+            return;
+        }
+
         const data = await res.json();
         allRequests = data.requests;
         renderRequests();
@@ -624,4 +631,4 @@
     } finally {
         showLoading(false);
     }
-        }
+}
