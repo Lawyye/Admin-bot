@@ -1,39 +1,69 @@
 
 // === GLOBALS ===
+let allRequests = [];
 let filterSearch = "";
 let filterStatus = "";
 
+// === TOOLS ===
 function escapeHtml(str) {
     return str.replace(/[&<>"']/g, m => ({
-        '&': '&',
-        '<': '<',
-        '>': '>',
-        '"': '"',
-        "'": "'"
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
     })[m]);
 }
 
-function notify(msg) {
+function notify(msg, type = "info") {
     const el = document.createElement('div');
-    el.className = 'toast';
+    el.className = 'notification show ' + type;
     el.innerText = msg;
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 3000);
 }
 
-function fetchRequests() {
-    fetch(`/admin/api/requests?search=${encodeURIComponent(filterSearch)}&status_f=${encodeURIComponent(filterStatus)}`, {
-        credentials: "same-origin"
-    })
-    .then(res => res.json())
-    .then(data => renderRequests(data.requests));
+function showLoading(isLoading) {
+    const table = document.getElementById('requests-table');
+    if (isLoading) {
+        table.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#999;">Загрузка данных...</td></tr>';
+    }
 }
 
-function renderRequests(requests) {
-    const tbody = document.getElementById('requests-table');
-    tbody.innerHTML = '';
-    for (let req of requests) {
-        const row = document.createElement('tr');
+// === LOAD DATA ===
+async function loadRequests() {
+    showLoading(true);
+    try {
+        const res = await fetch(`/admin/api/requests?search=${encodeURIComponent(filterSearch)}&status_f=${encodeURIComponent(filterStatus)}`);
+        const data = await res.json();
+        allRequests = data.requests;
+        renderRequests();
+        updateStats();
+    } catch (e) {
+        notify("Ошибка загрузки заявок: " + e.message, "error");
+    } finally {
+        showLoading(false);
+    }
+}
+
+function updateStats() {
+    document.getElementById("stat-new").textContent = allRequests.filter(r => r.status === "new").length;
+    document.getElementById("stat-inwork").textContent = allRequests.filter(r => r.status === "inwork").length;
+    document.getElementById("stat-done").textContent = allRequests.filter(r => r.status === "done").length;
+    document.getElementById("stat-total").textContent = allRequests.length;
+}
+
+function renderRequests() {
+    const tbody = document.getElementById("requests-table");
+    tbody.innerHTML = "";
+
+    for (const req of allRequests) {
+        const row = document.createElement("tr");
+
+        const docLinks = (req.documents || []).map(doc => 
+            `<a href="/admin/download/${doc.file_id}" class="doc-btn" download>${escapeHtml(doc.file_name)}</a>`
+        ).join("<br>");
+
         row.innerHTML = `
             <td>${req.id}</td>
             <td>${req.created_at}</td>
@@ -43,20 +73,17 @@ function renderRequests(requests) {
             <td>
                 <form onsubmit="return updateStatus(event, ${req.id})">
                     <select name="status">
-                        <option value="new" ${req.status === 'new' ? 'selected' : ''}>new</option>
-                        <option value="inwork" ${req.status === 'inwork' ? 'selected' : ''}>inwork</option>
-                        <option value="done" ${req.status === 'done' ? 'selected' : ''}>done</option>
+                        <option value="new" ${req.status === "new" ? "selected" : ""}>new</option>
+                        <option value="inwork" ${req.status === "inwork" ? "selected" : ""}>inwork</option>
+                        <option value="done" ${req.status === "done" ? "selected" : ""}>done</option>
                     </select>
                     <input type="hidden" name="id" value="${req.id}">
                     <button type="submit">OK</button>
                 </form>
             </td>
-            <td>
-                ${(req.documents || []).map(doc => `<a href="/admin/download/${doc.file_id}" class="doc-btn" download>${escapeHtml(doc.file_name)}</a>`).join("<br>")}
-            </td>
-            <td>
-                <button onclick="showReplyModal(${req.user_id})">Ответить</button>
-            </td>`;
+            <td>${docLinks}</td>
+            <td><button onclick="showReplyModal(${req.user_id})">Ответить</button></td>
+        `;
         tbody.appendChild(row);
     }
 }
@@ -65,81 +92,72 @@ function updateStatus(event, reqId) {
     event.preventDefault();
     const form = event.target;
     const data = new FormData(form);
-    fetch('/admin/status', {
-        method: 'POST',
-        body: data,
-        credentials: "same-origin"
+    fetch("/admin/status", {
+        method: "POST",
+        body: data
     }).then(() => {
-        notify("Статус обновлён!");
-        fetchRequests();
+        notify("Статус обновлён!", "success");
+        loadRequests();
     });
     return false;
 }
 
 function showReplyModal(userId) {
-    document.getElementById('reply-user-id').value = userId;
-    document.getElementById('reply-modal').style.display = 'block';
+    document.getElementById("reply-user-id").value = userId;
+    document.getElementById("reply-modal").classList.add("active");
 }
 
 function closeReplyModal() {
-    document.getElementById('reply-modal').style.display = 'none';
-    document.getElementById('reply-form').reset();
+    document.getElementById("reply-modal").classList.remove("active");
+    document.getElementById("reply-form").reset();
 }
 
-document.getElementById('reply-form').onsubmit = function(e) {
+document.getElementById("reply-form").onsubmit = function(e) {
     e.preventDefault();
     const form = e.target;
     const data = new FormData(form);
-    fetch('/admin/reply', {
-        method: 'POST',
-        body: data,
-        credentials: "same-origin"
+    fetch("/admin/reply", {
+        method: "POST",
+        body: data
     }).then(() => {
         closeReplyModal();
-        notify("Ответ отправлен!");
+        notify("Ответ отправлен!", "success");
     });
 };
 
-document.getElementById('search').addEventListener('input', function () {
+// === FILTERS ===
+document.getElementById("search").addEventListener("input", function () {
     filterSearch = this.value;
-    fetchRequests();
+    loadRequests();
 });
-
-document.getElementById('status-filter').addEventListener('change', function () {
+document.getElementById("status-filter").addEventListener("change", function () {
     filterStatus = this.value;
-    fetchRequests();
+    loadRequests();
 });
-
-document.getElementById('mobile-search').addEventListener('input', function () {
+document.getElementById("mobile-search").addEventListener("input", function () {
     filterSearch = this.value;
-    fetchRequests();
+    loadRequests();
 });
-
-document.getElementById('mobile-status-filter').addEventListener('change', function () {
+document.getElementById("mobile-status-filter").addEventListener("change", function () {
     filterStatus = this.value;
-    fetchRequests();
+    loadRequests();
 });
 
-setInterval(fetchRequests, 5000);
-window.addEventListener("load", fetchRequests);
+// === INTERVAL + THEME + MENU ===
+setInterval(loadRequests, 5000);
+window.addEventListener("load", loadRequests);
 
-// === WORKING MOBILE MENU ===
+function toggleTheme() {
+    document.body.classList.toggle("dark-theme");
+    const isDark = document.body.classList.contains("dark-theme");
+    localStorage.setItem("theme", isDark ? "dark" : "light");
+    document.getElementById("theme-icon").textContent = isDark ? "☀️" : "🌙";
+}
+
 function toggleMobileMenu() {
     const menu = document.getElementById("mobileMenu");
     const toggleBtn = document.querySelector(".mobile-menu-toggle");
     if (!menu || !toggleBtn) return;
     const isActive = menu.classList.toggle("active");
     toggleBtn.textContent = isActive ? '✖' : '☰';
-    console.log("Меню:", isActive ? 'Открыто' : 'Закрыто');
 }
-
-document.addEventListener("DOMContentLoaded", () => {
-    console.log("JS загружен — DOM готов");
-    const toggleBtn = document.querySelector(".mobile-menu-toggle");
-    if (toggleBtn) {
-        toggleBtn.addEventListener("click", toggleMobileMenu);
-        console.log("Слушатель на гамбургер добавлен");
-    } else {
-        console.warn("Кнопка меню не найдена");
-    }
-});
