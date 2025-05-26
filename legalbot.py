@@ -1,11 +1,19 @@
 import os
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = "/app/bot.db"
-print("Текущий путь к базе данных:", DB_PATH)  # <--- ВСТАВЬ ЭТО СЮДА
 import re
 import logging
 import sqlite3
 from typing import Optional
+
+
+# Путь к базе
+DB_PATH = os.getenv("DATABASE_PATH", "/app/bot.db")
+print("Текущий путь к базе данных:", DB_PATH)
+
+# Проверка: существует ли файл
+if not os.path.exists(DB_PATH):
+    print("‼️ ВНИМАНИЕ: ФАЙЛ bot.db НЕ НАЙДЕН")
+else:
+    print("✅ ФАЙЛ bot.db СУЩЕСТВУЕТ")
 
 from dotenv import load_dotenv
 
