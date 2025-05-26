@@ -1,18 +1,82 @@
-<!DOCTYPE html>
-<html>
+<!DOCTYPE html><html>
 <head>
     <title>LegalBot Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        :root {
+            --bg-color: #f6f7fb;
+            --text-color: #000;
+            --table-bg: #fff;
+            --th-bg: #f2f2f2;
+            --btn-bg: #2156b7;
+        }
+        .dark-theme {
+            --bg-color: #1e1e1e;
+            --text-color: #eee;
+            --table-bg: #2b2b2b;
+            --th-bg: #3b3b3b;
+            --btn-bg: #3762e0;
+        }
+        body {
+            background: var(--bg-color);
+            color: var(--text-color);
+            transition: background 0.3s, color 0.3s;
+        }
+        table {
+            background: var(--table-bg);
+        }
+        th {
+            background: var(--th-bg);
+        }
+        button,
+        .doc-btn {
+            background: var(--btn-bg);
+            color: #fff;
+        }
+        .theme-toggle {
+            margin-left: auto;
+            padding-left: 10px;
+        }
+        .theme-toggle button {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--text-color);
+        }
+    </style>
 </head>
 <body>
 <div class="header">
-    <h2>Заявки и документы LegalBot</h2>
+    <h2>Заявки и документы LegalBot</h2><!-- Переключатель темы -->
+<div class="theme-toggle">
+    <button onclick="toggleTheme()" id="theme-icon">🌙</button>
+</div>
+
+<!-- Кнопка меню для мобильных -->
+<button class="mobile-menu-toggle" onclick="toggleMobileMenu()">☰</button>
+
+<!-- Мобильное меню -->
+<div class="mobile-menu" id="mobileMenu">
     <form method="post" action="/admin/logout" style="display:inline;">
         <button type="submit" class="logout-btn">Выйти</button>
     </form>
+    <input type="text" id="mobile-search" placeholder="Поиск по имени, сообщению и т.д.">
+    <select id="mobile-status-filter">
+        <option value="">Все статусы</option>
+        <option value="new">new</option>
+        <option value="inwork">inwork</option>
+        <option value="done">done</option>
+    </select>
 </div>
-<div class="filters">
+
+<!-- Кнопка выхода для десктопа -->
+<form method="post" action="/admin/logout" class="desktop-logout">
+    <button type="submit" class="logout-btn">Выйти</button>
+</form>
+
+</div><div class="filters">
     <input type="text" id="search" placeholder="Поиск по имени, сообщению и т.д.">
     <select id="status-filter">
         <option value="">Все статусы</option>
@@ -20,8 +84,7 @@
         <option value="inwork">inwork</option>
         <option value="done">done</option>
     </select>
-</div>
-<table>
+</div><table>
     <thead>
         <tr>
             <th>ID</th>
@@ -35,10 +98,7 @@
         </tr>
     </thead>
     <tbody id="requests-table"></tbody>
-</table>
-
-<!-- Reply modal -->
-<div id="reply-modal" style="display:none;">
+</table><!-- Reply modal --><div id="reply-modal" style="display:none;">
     <div class="modal-content">
         <span onclick="closeReplyModal()" class="close">&times;</span>
         <h3>Ответ пользователю</h3>
@@ -48,95 +108,18 @@
             <button type="submit">Отправить</button>
         </form>
     </div>
-</div>
-
-<script>
-    let filterSearch = "";
-    let filterStatus = "";
-
-    function fetchRequests() {
-        fetch(`/admin/api/requests?search=${encodeURIComponent(filterSearch)}&status_f=${encodeURIComponent(filterStatus)}`)
-            .then(res => res.json())
-            .then(data => {
-                renderRequests(data.requests);
-            });
+</div><script src="/static/js/admin.js"></script><script>
+function toggleTheme() {
+    document.body.classList.toggle("dark-theme");
+    const isDark = document.body.classList.contains("dark-theme");
+    localStorage.setItem("theme", isDark ? "dark" : "light");
+    document.getElementById("theme-icon").textContent = isDark ? "☀️" : "🌙";
+}
+window.onload = () => {
+    if (localStorage.getItem("theme") === "dark") {
+        document.body.classList.add("dark-theme");
+        document.getElementById("theme-icon").textContent = "☀️";
     }
-    function renderRequests(requests) {
-        let tbody = document.getElementById('requests-table');
-        tbody.innerHTML = '';
-        for (let req of requests) {
-            let row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${req.id}</td>
-                <td>${req.created_at}</td>
-                <td>${req.name}</td>
-                <td>${req.phone}</td>
-                <td>${req.message}</td>
-                <td>
-                    <form onsubmit="return updateStatus(event, ${req.id})">
-                        <select name="status">
-                            <option value="new" ${req.status === 'new' ? 'selected' : ''}>new</option>
-                            <option value="inwork" ${req.status === 'inwork' ? 'selected' : ''}>inwork</option>
-                            <option value="done" ${req.status === 'done' ? 'selected' : ''}>done</option>
-                        </select>
-                        <input type="hidden" name="id" value="${req.id}">
-                        <button type="submit">OK</button>
-                    </form>
-                </td>
-                <td>
-                    ${(req.documents || []).map(doc =>
-                        `<a href="/admin/download/${doc.file_id}" class="doc-btn" download>${doc.file_name}</a>`
-                    ).join("<br>")}
-                </td>
-                <td>
-                    <button onclick="showReplyModal(${req.user_id})">Ответить</button>
-                </td>
-            `;
-            tbody.appendChild(row);
-        }
-    }
-    function showReplyModal(userId) {
-        document.getElementById('reply-user-id').value = userId;
-        document.getElementById('reply-modal').style.display = 'block';
-    }
-    function closeReplyModal() {
-        document.getElementById('reply-modal').style.display = 'none';
-    }
-    document.getElementById('reply-form').onsubmit = function(e) {
-        e.preventDefault();
-        var form = e.target;
-        var data = new FormData(form);
-        fetch('/admin/reply', {
-            method: 'POST',
-            body: data
-        }).then(() => {
-            closeReplyModal();
-            alert("Ответ отправлен!");
-        });
-    };
-    function updateStatus(event, reqId) {
-        event.preventDefault();
-        var form = event.target;
-        var data = new FormData(form);
-        fetch('/admin/status', {
-            method: 'POST',
-            body: data
-        }).then(() => {
-            alert("Статус обновлён!");
-            fetchRequests();
-        });
-        return false;
-    }
-    document.getElementById('search').addEventListener('input', function() {
-        filterSearch = this.value;
-        fetchRequests();
-    });
-    document.getElementById('status-filter').addEventListener('change', function() {
-        filterStatus = this.value;
-        fetchRequests();
-    });
-    setInterval(fetchRequests, 5000);
-    window.onload = fetchRequests;
-</script>
-</body>
+};
+</script></body>
 </html>
