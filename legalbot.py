@@ -1,6 +1,6 @@
 import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = "/data/bot.db"
+DB_PATH = os.getenv("DATABASE_PATH", "bot.db")
 print("Текущий путь к базе данных:", DB_PATH)  # <--- ВСТАВЬ ЭТО СЮДА
 import re
 import logging
