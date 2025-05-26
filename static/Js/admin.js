@@ -30,3 +30,7 @@ function toggleMobileMenu() { const menu = document.getElementById("mobileMenu")
 
 window.toggleMobileMenu = toggleMobileMenu;
 
+console.log("toggleMobileMenu добавлена");
+document.querySelector(".mobile-menu-toggle").addEventListener("click", () => {
+    console.log("Нажали на гамбургер!");
+});
