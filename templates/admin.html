@@ -49,12 +49,11 @@
 </head>
 <body>
 <div class="header">
-    <h2>Заявки и документы LegalBot</h2><div class="theme-toggle">
-    <button onclick="toggleTheme()" id="theme-icon">🌙</button>
-</div>
-
-<!-- Кнопка меню для мобильных -->
-<button class="mobile-menu-toggle" id="mobile-toggle-btn">☰</button>
+    <h2>Заявки и документы LegalBot</h2>
+    <div class="theme-toggle">
+        <button onclick="toggleTheme()" id="theme-icon">🌙</button>
+    </div><!-- Кнопка меню для мобильных -->
+<button class="mobile-menu-toggle">☰</button>
 
 <!-- Мобильное меню -->
 <div class="mobile-menu" id="mobileMenu">
@@ -106,13 +105,15 @@
             <input type="hidden" name="user_id" id="reply-user-id">
             <button type="submit">Отправить</button>
         </form>
-    </div><script src="/static/js/admin.js?v=5"></script>
+    </div>
+</div><script src="/static/js/admin.js?v=5"></script><script>
 function toggleTheme() {
     document.body.classList.toggle("dark-theme");
     const isDark = document.body.classList.contains("dark-theme");
     localStorage.setItem("theme", isDark ? "dark" : "light");
     document.getElementById("theme-icon").textContent = isDark ? "☀️" : "🌙";
 }
+
 window.addEventListener("load", () => {
     if (localStorage.getItem("theme") === "dark") {
         document.body.classList.add("dark-theme");
