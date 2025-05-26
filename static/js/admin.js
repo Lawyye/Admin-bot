@@ -1,6 +1,6 @@
 // === GLOBAL VARIABLES === let filterSearch = ""; let filterStatus = "";
 
-// === HELPERS === function escapeHtml(str) { return str.replace(/[&<>"']/g, m => ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": ''' })[m]); }
+// === HELPERS === function escapeHtml(str) { return str.replace(/[&<>"']/g, m => ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": "'" })[m]); }
 
 function notify(msg) { const el = document.createElement('div'); el.className = 'toast'; el.innerText = msg; document.body.appendChild(el); setTimeout(() => el.remove(), 3000); }
 
@@ -24,13 +24,11 @@ document.getElementById('mobile-search').addEventListener('input', function () {
 
 document.getElementById('mobile-status-filter').addEventListener('change', function () { filterStatus = this.value; fetchRequests(); });
 
-setInterval(fetchRequests, 5000); window.onload = fetchRequests;
+setInterval(fetchRequests, 5000); window.addEventListener("load", fetchRequests);
 
-function toggleMobileMenu() { const menu = document.getElementById("mobileMenu"); menu.classList.toggle("active"); }
+function toggleMobileMenu() { const menu = document.getElementById("mobileMenu"); if (menu) { menu.classList.toggle("active"); console.log("toggleMobileMenu вызвана"); } else { console.error("Не найден #mobileMenu"); } }
 
 window.toggleMobileMenu = toggleMobileMenu;
 
-console.log("toggleMobileMenu добавлена");
-document.querySelector(".mobile-menu-toggle").addEventListener("click", () => {
-    console.log("Нажали на гамбургер!");
-});
+console.log("JS загружен"); document.querySelector(".mobile-menu-toggle")?.addEventListener("click", () => { console.log("Нажали на гамбургер!"); });
+
