@@ -1,4 +1,6 @@
 import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "bot.db")
 import re
 import logging
 import sqlite3
@@ -49,7 +51,7 @@ templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # === DB INIT ===
-conn = sqlite3.connect("bot.db", check_same_thread=False)
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 c = conn.cursor()
 c.execute("""
     CREATE TABLE IF NOT EXISTS requests (
