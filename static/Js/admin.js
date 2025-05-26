@@ -20,5 +20,11 @@ document.getElementById('reply-form').onsubmit = function(e) { e.preventDefault(
 
 document.getElementById('status-filter').addEventListener('change', function() { filterStatus = this.value; fetchRequests(); });
 
+document.getElementById('mobile-search').addEventListener('input', function () { filterSearch = this.value; fetchRequests(); });
+
+document.getElementById('mobile-status-filter').addEventListener('change', function () { filterStatus = this.value; fetchRequests(); });
+
 setInterval(fetchRequests, 5000); window.onload = fetchRequests;
+
+// === MOBILE MENU TOGGLE === function toggleMobileMenu() { const menu = document.getElementById("mobileMenu"); menu.classList.toggle("active"); }
 
