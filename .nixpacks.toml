@@ -1,0 +1,12 @@
+.nixpacks.toml
+
+[phases.setup] nixPkgs = ["python311", "sqlite", "git"]
+
+[phases.build] cmds = []
+
+[phases.start] cmd = "python legalbot.py"
+
+[[mounts]] source = "botdata" target = "/data"
+
+[env] DATABASE_PATH = "/data/bot.db"
+
