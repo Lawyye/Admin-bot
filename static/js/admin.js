@@ -23,6 +23,25 @@ function notify(msg, type = "info") {
     setTimeout(() => el.remove(), 3000);
 }
 
+// === LOGOUT ===
+function logout() {
+    fetch('/admin/logout', {
+        method: 'POST',
+        credentials: 'same-origin'
+    })
+    .then(response => {
+        if (response.redirected) {
+            window.location.href = response.url;
+        } else {
+            alert('Ошибка выхода. Попробуйте обновить страницу.');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка выхода:', error);
+        notify('Не удалось выйти', 'error');
+    });
+}
+
 function showLoading(isLoading) {
     const table = document.getElementById('requests-table');
     if (isLoading) {
@@ -154,11 +173,29 @@ function toggleTheme() {
     document.getElementById("theme-icon").textContent = isDark ? "☀️" : "🌙";
 }
 
+// Обновлённая функция toggleMobileMenu()
 function toggleMobileMenu() {
     const menu = document.getElementById('mobileMenu');
-    const toggleBtn = document.getElementById('mobileMenuToggle');
-    if (!menu || !toggleBtn) return;
+    const toggleBtn = document.querySelector('.mobile-menu-toggle');
     
     menu.classList.toggle('active');
-    toggleBtn.textContent = menu.classList.contains('active') ? '✖' : '☰';
+    toggleBtn.textContent = menu.classList.contains('active') ? '✕' : '☰';
+    
+    // Закрытие меню при клике вне его области
+    if (menu.classList.contains('active')) {
+        document.addEventListener('click', closeMenuOnClickOutside);
+    } else {
+        document.removeEventListener('click', closeMenuOnClickOutside);
+    }
+}
+
+function closeMenuOnClickOutside(event) {
+    const menu = document.getElementById('mobileMenu');
+    const toggleBtn = document.querySelector('.mobile-menu-toggle');
+    
+    if (!menu.contains(event.target) && !toggleBtn.contains(event.target)) {
+        menu.classList.remove('active');
+        toggleBtn.textContent = '☰';
+        document.removeEventListener('click', closeMenuOnClickOutside);
+    }
 }
