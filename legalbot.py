@@ -663,13 +663,13 @@ async def bot_webhook(update: dict):
 @asynccontextmanager 
 async def lifespan(app: FastAPI):
     try:
-        # подключение Redis и установка вебхука
+        # Подключение Redis и установка вебхука
         redis = storage.redis
         await redis.ping()
         await bot.delete_webhook()
         await bot.set_webhook(WEBHOOK_URL)
 
-        # === ВРЕМЕННО добавляем колонку file_path в таблицу documents ===
+        # Временное добавление колонки file_path
         try:
             conn.execute("ALTER TABLE documents ADD COLUMN file_path TEXT")
             conn.commit()
@@ -678,24 +678,24 @@ async def lifespan(app: FastAPI):
             if "duplicate column name" in str(e):
                 logging.info("ℹ️ Колонка file_path уже существует, пропускаем")
             else:
-                logging.info("❌ Ошибка при добавлении колонки:", e)
+                logging.error("❌ Ошибка при добавлении колонки: %s", e)
                 raise
 
     except Exception as e:
         logging.error(f"Startup error: {e}")
         raise
-try:
-    yield
-finally:
-    
+
     try:
-        await bot.session.close()
-        await storage.close()
-    except Exception as e:
-        logging.error(f"Shutdown error: {e}")
-        raise
-        
-app = FastAPI(lifespan=lifespan)  # ← Здесь используется lifespan
+        yield
+    finally:
+        try:
+            await bot.session.close()
+            await storage.close()
+        except Exception as e:
+            logging.error(f"Shutdown error: {e}")
+            raise
+
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
