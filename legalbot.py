@@ -94,8 +94,10 @@ app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))  # Уберите значение по умолчанию
 
 # Конфигурация вебхука
-WEBHOOK_PATH = f"/webhook/{quote(API_TOKEN, safe='').replace(':', '%253A')}"  # Экранируем :
+encoded_token = quote(API_TOKEN, safe='').replace(':', '%25253A')
+WEBHOOK_PATH = f"/webhook/{encoded_token}"  # Экранируем :
 WEBHOOK_URL = f"{APP_URL}{WEBHOOK_PATH}"
+
 # Translation setup
 translations = {
     'ru': {
