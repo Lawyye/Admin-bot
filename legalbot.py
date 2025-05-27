@@ -46,7 +46,7 @@ ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
 ADMINS = {1899643695, 1980103568}
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret")
 
-logging.basicConfig(level=logging.INFO
+logging.basicConfig(level=logging.INFO,
 format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
