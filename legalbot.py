@@ -94,7 +94,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Webhook configuration
 WEBHOOK_PATH = f"/webhook/{API_TOKEN.replace(':', '%3A')}"
-WEBHOOK_URL = f"{APP_URL}{WEBHOOK_PATH}"
+WEBHOOK_URL = f"https://web-production-bb98.up.railway.app{WEBHOOK_PATH}"
 
 # Translation setup
 translations = {
