@@ -495,22 +495,26 @@ def authenticate_user(username: str, password: str) -> bool:
     )
 
 def get_requests_data(search: Optional[str]=None, status_f: Optional[str]=None):
-    sql = """
-        SELECT r.id, r.user_id, r.name, r.phone, r.message, r.created_at, r.status
-        FROM requests r
-        ORDER BY r.created_at DESC
-    """
+    sql = "SELECT r.id, r.user_id, r.name, r.phone, r.message, r.created_at, r.status FROM requests r"
     params = []
+    where_clauses = []
+    
     if search:
-        sql = sql.replace("ORDER BY", "WHERE r.name LIKE ? OR r.message LIKE ? ORDER BY")
+        where_clauses.extend(["r.name LIKE ?", "r.message LIKE ?"])
         params.extend([f'%{search}%', f'%{search}%'])
+    
     if status_f and status_f != "":
-        if "WHERE" in sql:
-            sql = sql.replace("ORDER BY", "AND r.status = ? ORDER BY")
-        else:
-            sql = sql.replace("ORDER BY", "WHERE r.status = ? ORDER BY")
+        where_clauses.append("r.status = ?")
         params.append(status_f)
+    
+    if where_clauses:
+        sql += " WHERE " + " AND ".join(where_clauses)
+    
+    sql += " ORDER BY r.created_at DESC"
+    
     c.execute(sql, params)
+    ...
+
     reqs = []
     for row in c.fetchall():
         c.execute("SELECT file_id, file_name FROM documents WHERE request_id=?", (row[0],))
