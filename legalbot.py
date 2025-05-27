@@ -21,6 +21,9 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
+templates = Jinja2Templates(directory="templates")
+
+
 import httpx
 
 # Load environment variables
@@ -91,7 +94,7 @@ app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))  # Уберите значение по умолчанию
 
 # Конфигурация вебхука
-WEBHOOK_PATH = f"/webhook/{quote(API_TOKEN, safe='')}"  # Экранируем :
+WEBHOOK_PATH = f"/webhook/{quote(API_TOKEN, safe='').replace(':', '%253A')}"  # Экранируем :
 WEBHOOK_URL = f"{APP_URL}{WEBHOOK_PATH}"
 # Translation setup
 translations = {
