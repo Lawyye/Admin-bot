@@ -47,6 +47,8 @@ ADMINS = {1899643695, 1980103568}
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret")
 
 logging.basicConfig(level=logging.INFO)
+format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
 # === BOT & FASTAPI INIT ===
 storage = RedisStorage.from_url(
@@ -671,20 +673,21 @@ async def lifespan(app: FastAPI):
         try:
             conn.execute("ALTER TABLE documents ADD COLUMN file_path TEXT")
             conn.commit()
-            loggin.info("✅ Добавлена колонка file_path в таблицу documents")
+            logging.info("✅ Добавлена колонка file_path в таблицу documents")
         except Exception as e:
             if "duplicate column name" in str(e):
-                loggin.info("ℹ️ Колонка file_path уже существует, пропускаем")
+                logging.info("ℹ️ Колонка file_path уже существует, пропускаем")
             else:
-                loggin.info("❌ Ошибка при добавлении колонки:", e)
+                logging.info("❌ Ошибка при добавлении колонки:", e)
                 raise
 
     except Exception as e:
         logging.error(f"Startup error: {e}")
         raise
-
+try:
     yield
-
+finally:
+    
     try:
         await bot.session.close()
         await storage.close()
