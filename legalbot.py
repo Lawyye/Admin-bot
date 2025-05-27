@@ -4,6 +4,7 @@ import logging
 import sqlite3
 from typing import Optional
 
+from contextlib import asynccontextmanager
 
 # Путь к базе
 DB_PATH = os.getenv("DATABASE_PATH", "/app/bot.db")
@@ -657,8 +658,8 @@ async def bot_webhook(update: dict):
         logging.error(f"Webhook error: {str(e)}", exc_info=True)
         return {"ok": False, "error": str(e)}
 
-@app.on_event("startup")
-async def on_startup():
+@asynccontextmanager 
+async def lifespan(app: FastAPI):
     try:
         # подключение Redis и установка вебхука
         redis = storage.redis
@@ -670,25 +671,31 @@ async def on_startup():
         try:
             conn.execute("ALTER TABLE documents ADD COLUMN file_path TEXT")
             conn.commit()
-            print("✅ Добавлена колонка file_path в таблицу documents")
+            loggin.info("✅ Добавлена колонка file_path в таблицу documents")
         except Exception as e:
             if "duplicate column name" in str(e):
-                print("ℹ️ Колонка file_path уже существует, пропускаем")
+                loggin.info("ℹ️ Колонка file_path уже существует, пропускаем")
             else:
-                print("❌ Ошибка при добавлении колонки:", e)
+                loggin.info("❌ Ошибка при добавлении колонки:", e)
+                raise
 
     except Exception as e:
         logging.error(f"Startup error: {e}")
         raise
 
-@app.on_event("shutdown")
-async def on_shutdown():
+    yield
+
     try:
         await bot.session.close()
         await storage.close()
     except Exception as e:
         logging.error(f"Shutdown error: {e}")
         raise
+        
+app = FastAPI(lifespan=lifespan)  # ← Здесь используется lifespan
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if __name__ == "__main__":
     import uvicorn
