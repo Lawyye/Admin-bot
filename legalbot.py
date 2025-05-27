@@ -90,9 +90,13 @@ bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=storage)
 
 # Initialize FastAPI
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))  # Уберите значение по умолчанию
 
+# Монтируем статические файлы
+app.mount("/static", 
+StaticFiles(directory="static"), 
+name="static")
 # Конфигурация вебхука
 encoded_token = quote(API_TOKEN, safe='').replace(':', '%25253A')
 WEBHOOK_PATH = f"/webhook/{encoded_token}"  # Экранируем :
