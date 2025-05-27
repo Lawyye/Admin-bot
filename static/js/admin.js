@@ -155,9 +155,10 @@ function toggleTheme() {
 }
 
 function toggleMobileMenu() {
-    const menu = document.getElementById("mobileMenu");
-    const toggleBtn = document.querySelector(".mobile-menu-toggle");
+    const menu = document.getElementById('mobileMenu');
+    const toggleBtn = document.getElementById('mobileMenuToggle');
     if (!menu || !toggleBtn) return;
-    const isActive = menu.classList.toggle("active");
-    toggleBtn.textContent = isActive ? '✖' : '☰';
+    
+    menu.classList.toggle('active');
+    toggleBtn.textContent = menu.classList.contains('active') ? '✖' : '☰';
 }
