@@ -88,14 +88,11 @@ dp = Dispatcher(storage=storage)
 
 # Initialize FastAPI
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))  # Уберите значение по умолчанию
 
-# Webhook configuration
-WEBHOOK_PATH = f"/webhook/{API_TOKEN.replace(':', '%3A')}"
-WEBHOOK_URL = f"https://web-production-bb98.up.railway.app{WEBHOOK_PATH}"
-
+# Конфигурация вебхука
+WEBHOOK_PATH = f"/webhook/{API_TOKEN.replace(':', '%3A')}"  # Экранируем :
+WEBHOOK_URL = f"{APP_URL}{WEBHOOK_PATH}"
 # Translation setup
 translations = {
     'ru': {
@@ -300,21 +297,51 @@ def admin_panel(request: Request):
 # Lifespan management
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Startup logic
+    webhook_set = False
     try:
         await bot.delete_webhook()
-        await bot.set_webhook(WEBHOOK_URL)
-        logging.info(f"Webhook set: {WEBHOOK_URL}")
+        await bot.set_webhook(
+            url=WEBHOOK_URL,
+            drop_pending_updates=True,
+            allowed_updates=dp.resolve_used_update_types()
+        )
+        webhook_set = True
+        logging.info(f"✅ Webhook successfully set to: {WEBHOOK_URL}")
+        
     except Exception as e:
-        logging.error(f"Webhook setup failed: {e}")
+        logging.critical(f"❌ Failed to set webhook: {e}")
         raise
-
+    
     try:
         yield
+        
     finally:
-        await bot.session.close()
-        await storage.close()
-        conn.close()
-        logging.info("Resources cleaned up")
+        # Shutdown logic
+        try:
+            if webhook_set:
+                await bot.delete_webhook()
+                logging.info("🗑 Webhook deleted")
+        except Exception as e:
+            logging.error(f"⚠️ Error deleting webhook: {e}")
+
+        try:
+            await bot.session.close()
+            logging.info("🤖 Bot session closed")
+        except Exception as e:
+            logging.error(f"⚠️ Error closing bot session: {e}")
+
+        try:
+            await storage.close()
+            logging.info("🗄 Redis storage closed")
+        except Exception as e:
+            logging.error(f"⚠️ Error closing storage: {e}")
+
+        try:
+            conn.close()
+            logging.info("🔒 Database connection closed")
+        except Exception as e:
+            logging.error(f"⚠️ Error closing database: {e}")
 
 # Webhook handler
 @app.post(WEBHOOK_PATH)
@@ -322,10 +349,11 @@ async def handle_webhook(update: dict):
     try:
         telegram_update = types.Update(**update)
         await dp.feed_update(bot=bot, update=telegram_update)
-        return {"ok": True}
+        return {"status": "ok"}
     except Exception as e:
-        logging.error(f"Webhook error: {e}", exc_info=True)
-        return {"ok": False, "error": str(e)}
+        logging.error(f"Webhook error: {e}")
+        return {"status": "error", "details": str(e)}
+
 
 if __name__ == "__main__":
     import uvicorn
