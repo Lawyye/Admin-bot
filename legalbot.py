@@ -2,61 +2,45 @@ import logging
 import os
 from datetime import datetime, timezone
 import sqlite3
-from urllib.parse import urljoin
-from fastapi import Request
 from contextlib import asynccontextmanager
-from fastapi import UploadFile, File
-from aiogram.filters import Command
+from urllib.parse import urljoin
+
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, Update
-import redis.asyncio as redis
-from fastapi import FastAPI, Request, Form, HTTPException, status
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from fastapi import FastAPI, Request, Form
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
-import itsdangerous
+import redis.asyncio as redis
 import uvicorn
 
-# Настройка логирования
+# ===== НАСТРОЙКА ЛОГИРОВАНИЯ =====
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Загрузка переменных окружения
 load_dotenv()
 
-# Настройка бота
+# ===== ИНИЦИАЛИЗАЦИЯ БОТА =====
 API_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
-logger.info(f"Loaded API_TOKEN: {API_TOKEN}")
 
 if not API_TOKEN:
-    logger.error("API_TOKEN is empty. Please set BOT_TOKEN in .env file.")
-    raise ValueError("API_TOKEN is empty. Please set BOT_TOKEN in .env file.")
+    raise ValueError("BOT_TOKEN не установлен в .env")
 
-try:
-    bot = Bot(token=API_TOKEN)
-    logger.info("Bot initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize bot: {e}")
-    raise
-
+bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
-dp = Dispatcher(bot=bot, storage=storage)
+dp = Dispatcher(storage=storage)
 
-# Настройка Redis
-redis_client = redis.Redis(host='redis', port=6379, db=0)
-
-# База данных
+# ===== БАЗА ДАННЫХ =====
 conn = sqlite3.connect('bot.db', check_same_thread=False)
 conn.row_factory = sqlite3.Row
 
-# Создание таблиц
 with conn:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS requests (
@@ -67,8 +51,7 @@ with conn:
             message TEXT,
             created_at TEXT,
             status TEXT DEFAULT 'new'
-        )
-    """)
+        )""")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,280 +59,150 @@ with conn:
             file_id TEXT,
             file_name TEXT,
             sent_at TEXT,
-            FOREIGN KEY (request_id) REFERENCES requests (id)
-        )
-    """)
+            FOREIGN KEY (request_id) REFERENCES requests(id)
+        )""")
 
-# Переводы
+# ===== ПЕРЕВОДЫ =====
 translations = {
     'ru': {
-        'start': '👋 Привет! Я LegalBot, ваш юридический помощник. Выберите язык / Choose language:\n🇷🇺 Русский\n🇬🇧 English',
-        'select_lang': 'Выберите язык / Choose language',
-        'canceled': '❌ Запрос отменен. Вы вернулись в главное меню.',
-        'thanks': '✅ Спасибо! Ваша заявка принята. Мы свяжемся с вами в ближайшее время.',
-        'error_missing_data': 'Ошибка: не все данные заполнены. Пожалуйста, начните заново.',
-        'faq_not_added': '⚠️ Функция "Часто задаваемые вопросы" пока не добавлена. Скоро будет доступна!',
-        'contacts': '📞 Наши контакты:\nТелефон: +123456789\nEmail: support@legalbot.com'
+        'start': '👋 Привет! Я LegalBot. Выберите язык:\n🇷🇺 Русский\n🇬🇧 English',
+        'canceled': '❌ Запрос отменен',
+        'thanks': '✅ Спасибо! Ваша заявка принята',
+        'error_missing_data': '⚠️ Заполните все поля',
+        'contacts': '📞 Контакты: +123456789',
+        'menu': 'Главное меню'
     },
     'en': {
-        'start': '👋 Hello! I am LegalBot, your legal assistant. Choose language / Выберите язык:\n🇬🇧 English\n🇷🇺 Русский',
-        'select_lang': 'Choose language / Выберите язык',
-        'canceled': '❌ Request canceled. You are back to the main menu.',
-        'thanks': '✅ Thank you! Your request has been accepted. We will contact you soon.',
-        'error_missing_data': 'Error: not all data is filled. Please start over.',
-        'faq_not_added': '⚠️ The "Frequently Asked Questions" feature is not yet added. Coming soon!',
-        'contacts': '📞 Our contacts:\nPhone: +123456789\nEmail: support@legalbot.com'
+        'start': '👋 Hello! I am LegalBot. Choose language:\n🇬🇧 English\n🇷🇺 Русский',
+        'canceled': '❌ Request canceled',
+        'thanks': '✅ Thank you! Request accepted',
+        'error_missing_data': '⚠️ Please fill all fields',
+        'contacts': '📞 Contacts: +123456789',
+        'menu': 'Main menu'
     }
 }
 
-# Состояния
+# ===== СОСТОЯНИЯ =====
 class RequestForm(StatesGroup):
     waiting_for_name = State()
     waiting_for_phone = State()
     waiting_for_message = State()
     attach_docs = State()
 
-async def get_lang(state: FSMContext, user_id: int) -> str:
+# ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
+async def get_lang(state: FSMContext) -> str:
     data = await state.get_data()
     return data.get('lang', 'ru')
 
-def get_menu_kb(user_id: int, lang: str) -> ReplyKeyboardMarkup:
+def get_menu(lang: str) -> ReplyKeyboardMarkup:
     t = translations[lang]
-    keyboard = [
-        [KeyboardButton(t['faq_not_added']), KeyboardButton("Контакты")],
-        [KeyboardButton("Записаться на консультацию"), KeyboardButton("Админ-панель")]
-    ]
-    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton("Записаться на консультацию")],
+            [KeyboardButton(t['contacts']), KeyboardButton("Админ-панель")]
+        ],
+        resize_keyboard=True
+    )
 
+# ===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
 @dp.message(Command("start"))
-async def start_command(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
+async def start_handler(message: types.Message, state: FSMContext):
     await state.update_data(lang='ru')
-    t = translations['ru']
     await message.answer(
-        t['start'],
-        reply_markup=get_menu_kb(user_id, 'ru')
+        translations['ru']['start'],
+        reply_markup=get_menu('ru')
     )
 
 @dp.message(F.text.in_(["🇷🇺 Русский", "🇬🇧 English"]))
-async def set_lang(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
+async def lang_handler(message: types.Message, state: FSMContext):
     lang = 'ru' if message.text == "🇷🇺 Русский" else 'en'
     await state.update_data(lang=lang)
     t = translations[lang]
-    await message.answer(
-        t['select_lang'],
-        reply_markup=get_menu_kb(user_id, lang)
-    )
+    await message.answer(t['menu'], reply_markup=get_menu(lang))
 
 @dp.message(F.text == "Записаться на консультацию")
-async def start_request(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    lang = await get_lang(state, user_id)
-    
+async def request_handler(message: types.Message, state: FSMContext):
     await state.set_state(RequestForm.waiting_for_name)
-    await message.answer(
-        "Введите ваше имя / Enter your name",
-        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton("⬅️ Назад")]], resize_keyboard=True)
-    )
+    await message.answer("Введите ваше имя:")
 
 @dp.message(RequestForm.waiting_for_name)
-async def process_name(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
+async def name_handler(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
     await state.set_state(RequestForm.waiting_for_phone)
-    await message.answer(
-        "Введите ваш телефон / Enter your phone",
-        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton("⬅️ Назад")]], resize_keyboard=True)
-    )
+    await message.answer("Введите ваш телефон:")
 
 @dp.message(RequestForm.waiting_for_phone)
-async def process_phone(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
+async def phone_handler(message: types.Message, state: FSMContext):
     await state.update_data(phone=message.text)
     await state.set_state(RequestForm.waiting_for_message)
-    await message.answer(
-        "Введите сообщение / Enter your message",
-        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton("⬅️ Назад")]], resize_keyboard=True)
-    )
+    await message.answer("Опишите вашу проблему:")
 
 @dp.message(RequestForm.waiting_for_message)
-async def process_message(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
+async def message_handler(message: types.Message, state: FSMContext):
     await state.update_data(message_text=message.text)
     await state.set_state(RequestForm.attach_docs)
-    await message.answer(
-        "Прикрепите документы (если есть) и нажмите /done для завершения / Attach documents (if any) and press /done to finish",
-        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton("⬅️ Назад"), KeyboardButton("/done")]], resize_keyboard=True)
-    )
+    await message.answer("Прикрепите документы (если есть) и нажмите /done")
 
-@dp.message(RequestForm.attach_docs, F.document)
-async def process_document(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    document = {
+@dp.message(F.document, RequestForm.attach_docs)
+async def doc_handler(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    docs = data.get('docs', [])
+    docs.append({
         'file_id': message.document.file_id,
         'file_name': message.document.file_name
-    }
-    data = await state.get_data()
-    documents = data.get('documents', [])
-    documents.append(document)
-    await state.update_data(documents=documents)
-    await message.answer(
-        "Документ добавлен. Прикрепите еще (если нужно) или нажмите /done для завершения / Document added. Attach more (if needed) or press /done to finish",
-        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton("⬅️ Назад"), KeyboardButton("/done")]], resize_keyboard=True)
-    )
+    })
+    await state.update_data(docs=docs)
+    await message.answer("Документ добавлен!")
 
 @dp.message(Command("done"), RequestForm.attach_docs)
-async def done_command(message: types.Message, state: FSMContext):
-    logger.info(f"Processing /done command for user {message.from_user.id}")
-    await finish_request(message, state)
-
-@dp.message(F.text == "⬅️ Назад", RequestForm)
-async def cancel_request(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    lang = await get_lang(state, user_id)
-    t = translations[lang]
-    
-    await state.clear()
-    await message.answer(
-        t['canceled'],
-        reply_markup=get_menu_kb(user_id, lang)
-    )
-
-async def finish_request(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    lang = await get_lang(state, user_id)
-    t = translations[lang]
-    
+async def finish_handler(message: types.Message, state: FSMContext):
     data = await state.get_data()
+    lang = await get_lang(state)
     
-    required_fields = ['name', 'phone', 'message_text']
-    if not all(key in data for key in required_fields):
-        await message.answer(
-            t['error_missing_data'],
-            reply_markup=get_menu_kb(user_id, lang)
-        )
-        await state.clear()
-        return
-    
+    # Сохранение в БД
     with conn:
         cursor = conn.execute(
-            """INSERT INTO requests (user_id, name, phone, message, created_at, status)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (
-                user_id,
-                data['name'],
-                data['phone'],
-                data['message_text'],
-                datetime.now(timezone.utc).isoformat(),
-                'new'
-            )
+            """INSERT INTO requests 
+            (user_id, name, phone, message, created_at) 
+            VALUES (?, ?, ?, ?, ?)""",
+            (message.from_user.id, 
+             data['name'], 
+             data['phone'], 
+             data['message_text'],
+             datetime.now(timezone.utc).isoformat())
         )
         request_id = cursor.lastrowid
         
-        documents = data.get('documents', [])
-        for doc in documents:
+        for doc in data.get('docs', []):
             conn.execute(
-                """INSERT INTO documents (request_id, file_id, file_name, sent_at)
-                   VALUES (?, ?, ?, ?)""",
-                (request_id, doc['file_id'], doc['file_name'], datetime.now(timezone.utc).isoformat())
+                """INSERT INTO documents 
+                (request_id, file_id, file_name, sent_at) 
+                VALUES (?, ?, ?, ?)""",
+                (request_id, doc['file_id'], doc['file_name'], 
+                 datetime.now(timezone.utc).isoformat())
             )
-
-    if ADMIN_CHAT_ID:
-        admin_text = f"""
-🆕 Новая заявка #{request_id}
-
-👤 Имя: {data['name']}
-📞 Телефон: {data['phone']}
-💬 Сообщение: {data['message_text']}
-📅 Дата: {datetime.now(timezone.utc).strftime('%d.%m.%Y %H:%M')} (UTC)
-"""
-        try:
-            await bot.send_message(ADMIN_CHAT_ID, admin_text)
-            for doc in documents:
-                await bot.send_document(
-                    ADMIN_CHAT_ID,
-                    doc['file_id'],
-                    caption=f"Документ к заявке #{request_id}: {doc['file_name']}"
-                )
-        except Exception as e:
-            logger.error(f"Error sending to admin: {e}")
     
+    await message.answer(translations[lang]['thanks'])
     await state.clear()
-    await message.answer(
-        t['thanks'],
-        reply_markup=get_menu_kb(user_id, lang)
-    )
 
-@dp.message(F.text.in_(["Часто задаваемые вопросы", "FAQ"]))
-async def faq(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    lang = await get_lang(state, user_id)
-    t = translations[lang]
-    
-    await message.answer(
-        t['faq_not_added'],
-        reply_markup=get_menu_kb(user_id, lang)
-    )
-
-@dp.message(F.text == "Контакты")
-async def contacts(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    lang = await get_lang(state, user_id)
-    t = translations[lang]
-    
-    await message.answer(
-        t['contacts'],
-        reply_markup=get_menu_kb(user_id, lang)
-    )
-
-# Обработчик всех остальных сообщений
-@dp.message()
-async def handle_other_messages(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    lang = await get_lang(state, user_id)
-    await message.answer(
-        "Используйте меню для навигации / Use menu for navigation",
-        reply_markup=get_menu_kb(user_id, lang)
-    )
-
-# Webhook обработчик
-WEBHOOK_PATH = '/webhook'
-WEBHOOK_HOST = os.getenv('WEBHOOK_HOST', 'https://web-production-bb98.up.railway.app')
-WEBHOOK_URL = urljoin(WEBHOOK_HOST.rstrip('/') + '/', WEBHOOK_PATH.lstrip('/'))
-
-# Функции для lifecycle
-async def on_startup():
-    try:
-        await bot.delete_webhook()
-        logger.info(f"Trying to set webhook to: {WEBHOOK_URL}")
-        await bot.set_webhook(WEBHOOK_URL)
-        logger.info(f"Webhook verified: {await bot.get_webhook_info()}")
-    except Exception as e:
-        logger.error(f"Webhook setup failed: {str(e)}")
-
-async def on_shutdown():
-    try:
-        await bot.delete_webhook()
-        logger.info("Webhook deleted successfully")
-    except Exception as e:
-        logger.error(f"Failed to delete webhook: {e}")
-
+# ===== FASTAPI НАСТРОЙКА =====
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await on_startup()
+    await bot.delete_webhook()
+    WEBHOOK_URL = urljoin(
+        os.getenv('WEBHOOK_HOST', 'https://your-domain.com'), 
+        '/webhook'
+    )
+    await bot.set_webhook(WEBHOOK_URL)
+    logger.info(f"Webhook установлен: {WEBHOOK_URL}")
     yield
-    await on_shutdown()
+    await bot.delete_webhook()
 
-# Создание приложения FastAPI с lifespan ОДИН РАЗ
 app = FastAPI(lifespan=lifespan)
-
-# Настройка templates и static files
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Middleware для сессий
-app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET_KEY', 'your-secret-key'))
+# ===== CORS =====
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -358,83 +211,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Webhook маршрут
-@app.post(WEBHOOK_PATH)
-async def webhook(request: Request):
+# ===== ВЕБХУК =====
+@app.post("/webhook")
+async def webhook_handler(request: Request):
     try:
-        update_data = await request.json()
-        logger.info(f"Received update: {update_data}")
-        await dp.feed_raw_update(bot=bot, update=update_data)
-        logger.info("Update processed successfully")
+        update = types.Update(**await request.json())
+        await dp.feed_update(bot, update)
         return {"ok": True}
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        logger.error(f"Update data: {update_data}")
-        return {"ok": False}
+        logger.error(f"Ошибка: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": str(e)}
+        )
 
-# Админ-панель маршруты
+# ===== АДМИН-ПАНЕЛЬ =====
+app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET', 'secret'))
+
 @app.get("/admin/login")
 async def admin_login(request: Request):
-    if request.session.get("admin"):
-        return RedirectResponse("/admin", status_code=302)
-    return templates.TemplateResponse("admin_login.html", {"request": request})
+    return templates.TemplateResponse("login.html", {"request": request})
 
 @app.post("/admin/login")
-async def admin_login_post(
+async def admin_auth(
     username: str = Form(...),
     password: str = Form(...),
     request: Request = None
 ):
-    valid_admins = [
-        {"username": os.getenv('ADMIN_USERNAME1', 'nurbol'), "password": os.getenv('ADMIN_PASSWORD1', 'marzhan2508')},
-        {"username": os.getenv('ADMIN_USERNAME2', 'vlad'), "password": os.getenv('ADMIN_PASSWORD2', 'archiboss20052024')}
-    ]
-    logger.info(f"Login attempt: username={username}, password={password}")
-    for admin in valid_admins:
-        if username == admin["username"] and password == admin["password"]:
-            request.session["admin"] = True
-            return RedirectResponse("/admin", status_code=302)
-    return templates.TemplateResponse("admin_login.html", {"request": request, "error": "Неверные учетные данные"})
-
-@app.get("/admin/logout")
-async def admin_logout(request: Request):
-    request.session.clear()
-    return RedirectResponse("/admin/login", status_code=302)
+    valid_users = {
+        os.getenv('ADMIN_USER1', 'nurbol'): os.getenv('ADMIN_PASS1', 'marzhan2508'),
+        os.getenv('ADMIN_USER2', 'vlad'): os.getenv('ADMIN_PASS2', 'archiboss20052024')
+    }
+    if username in valid_users and password == valid_users[username]:
+        request.session["auth"] = True
+        return RedirectResponse("/admin", status_code=302)
+    return templates.TemplateResponse(
+        "login.html", 
+        {"request": request, "error": "Неверные данные"},
+        status_code=401
+    )
 
 @app.get("/admin")
-async def admin(request: Request):
-    if not request.session.get("admin"):
-        return RedirectResponse("/admin/login", status_code=302)
+async def admin_panel(request: Request):
+    if not request.session.get("auth"):
+        return RedirectResponse("/admin/login")
     return templates.TemplateResponse("admin.html", {"request": request})
 
-@app.get("/admin/api/requests")
-async def get_requests(request: Request):
-    if not request.session.get("admin"):
-        return JSONResponse({"error": "Unauthorized"}, status_code=403)
-    
-    rows = conn.execute("""
-        SELECT r.*, GROUP_CONCAT(d.file_name) as documents
-        FROM requests r
-        LEFT JOIN documents d ON r.id = d.request_id
-        GROUP BY r.id
-        ORDER BY r.created_at DESC
-    """).fetchall()
-    
-    requests = []
-    for row in rows:
-        requests.append({
-            'id': row['id'],
-            'user_id': row['user_id'],
-            'name': row['name'],
-            'phone': row['phone'],
-            'message': row['message'],
-            'created_at': row['created_at'],
-            'status': row['status'],
-            'documents': row['documents'].split(',') if row['documents'] else []
-        })
-    
-    return {"requests": requests}
-
-# Запуск сервера
+# ===== ЗАПУСК =====
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
