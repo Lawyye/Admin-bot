@@ -58,7 +58,6 @@ storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
 #===== БАЗА ДАННЫХ =====
-
 async def init_db(): 
     async with aiosqlite.connect('bot.db') as db: 
         await db.execute(""" 
@@ -72,17 +71,17 @@ async def init_db():
                 status TEXT DEFAULT 'new' 
   )""") 
   await db.execute(""" 
-      CREATE TABLE IF NOT EXISTS documents ( 
-          id INTEGER PRIMARY KEY AUTOINCREMENT, 
-          request_id INTEGER, 
-          file_id TEXT, 
-          file_name TEXT, 
-          file_type TEXT, 
-          file_size INTEGER, 
-          sent_at TEXT, 
-          FOREIGN KEY (request_id) REFERENCES requests(id) 
-  )""") 
-  await db.commit()
+ CREATE TABLE IF NOT EXISTS documents ( 
+     id INTEGER PRIMARY KEY AUTOINCREMENT, 
+     request_id INTEGER, 
+     file_id TEXT, 
+     file_name TEXT, 
+     file_type TEXT, 
+     file_size INTEGER, 
+     sent_at TEXT, 
+     FOREIGN KEY (request_id) REFERENCES requests(id) 
+ )""") 
+         await db.commit()
 
 #===== ПЕРЕВОДЫ =====
 
