@@ -2,9 +2,7 @@ import logging
 import os
 from datetime import datetime, timezone
 import sqlite3
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
-from aiogram.filters import Text
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -134,7 +132,7 @@ async def start_command(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-@dp.message(Text(equals=["🇷🇺 Русский", "🇬🇧 English"], ignore_case=True))
+@dp.message(F.text.in_(["🇷🇺 Русский", "🇬🇧 English"]))
 async def set_lang(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = 'ru' if message.text == "🇷🇺 Русский" else 'en'
@@ -145,7 +143,7 @@ async def set_lang(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-@dp.message(Text(equals="Записаться на консультацию", ignore_case=True))
+@dp.message(F.text == "Записаться на консультацию")
 async def start_request(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -220,7 +218,7 @@ async def done_command(message: types.Message, state: FSMContext):
     logger.info(f"Processing /done command for user {message.from_user.id}")
     await finish_request(message, state)
 
-@dp.message(Text(equals="⬅️ Назад", ignore_case=True), RequestForm)
+@dp.message(F.text == "⬅️ Назад", RequestForm)
 async def cancel_request(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -306,7 +304,7 @@ async def finish_request(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-@dp.message(Text(equals=["Часто задаваемые вопросы", "FAQ"], ignore_case=True))
+@dp.message(F.text.in_(["Часто задаваемые вопросы", "FAQ"]))
 async def faq(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -317,7 +315,7 @@ async def faq(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-@dp.message(Text(equals="Контакты", ignore_case=True))
+@dp.message(F.text == "Контакты")
 async def contacts(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -405,4 +403,4 @@ if __name__ == '__main__':
         skip_updates=True,
         host='0.0.0.0',
         port=8080,
-)
+    )
