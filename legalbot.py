@@ -215,7 +215,10 @@ app.add_middleware(
 @app.post("/webhook")
 async def webhook_handler(request: Request):
     try:
-        update = types.Update(**await request.json())
+        # Получаем JSON данные из запроса
+        update_data = await request.json()
+        # Создаем объект Update правильным способом
+        update = types.Update.model_validate(update_data)
         await dp.feed_update(bot, update)
         return {"ok": True}
     except Exception as e:
