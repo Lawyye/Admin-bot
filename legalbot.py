@@ -311,32 +311,9 @@ async def finish_handler(message: types.Message, state: FSMContext):
 async def lifespan(app: FastAPI):
     try:
         await init_db()
-        
-        webhook_path = '/webhook'
-        webhook_url = urljoin(
-            os.getenv('WEBHOOK_HOST', 'https://web-production-bb98.up.railway.app'),
-            webhook_path
-        )
-        
-        current_webhook = await bot.get_webhook_info()
-        logger.info(f"Current webhook info: {current_webhook}")
-        
-        await bot.delete_webhook(drop_pending_updates=True)
-        logger.info("Old webhook deleted")
-        
-        webhook_info = await bot.set_webhook(
-            url=webhook_url,
-            allowed_updates=['message', 'callback_query', 'inline_query'],
-            drop_pending_updates=True
-        )
-        
-        logger.info(f"New webhook set: {webhook_url}")
-        logger.info(f"Webhook setup result: {webhook_info}")
-        
+        # webhook setup ...
         yield
-        
-        await bot.delete_webhook()
-        logger.info("Webhook deleted on shutdown")
+        # shutdown webhook
     except Exception as e:
         logger.error(f"Lifespan error: {e}")
         raise
@@ -344,12 +321,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/admin-react", StaticFiles(directory="static/admin-react", html=True), name="admin-react")
+app.mount(
+    "/admin-react",
+    StaticFiles(directory="static/admin-react", html=True),
+    name="admin-react"
+)
 
 # ===== CORS =====
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS else ["*"],
+    allow_origins=ALLOWED_ORIGINS or ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -361,7 +342,7 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET', 'se
 # ===== ROUTES =====
 @app.get("/")
 async def root():
-    return RedirectResponse("/admin/login", status_code=302)
+    return RedirectResponse("/admin-react", status_code=302)
 
 @app.get("/admin/login")
 async def admin_login(request: Request):
@@ -373,57 +354,20 @@ async def admin_auth(
     password: str = Form(...),
     request: Request = None
 ):
-    valid_users = {
-        os.getenv('ADMIN_USER1', 'nurbol'): os.getenv('ADMIN_PASS1', 'marzhan2508'),
-        os.getenv('ADMIN_USER2', 'vlad'): os.getenv('ADMIN_PASS2', 'archiboss20052024')
-    }
+    valid_users = {...}
     if username in valid_users and password == valid_users[username]:
         request.session["auth"] = True
-        return RedirectResponse("/admin", status_code=302)
+        return RedirectResponse("/admin-react", status_code=302)
     return templates.TemplateResponse(
-        "admin_login.html", 
-        {"request": request, "error": "Неверные данные"},
-        status_code=401
+        "admin_login.html", {"request": request, "error": "Неверные данные"}, status_code=401
     )
-
-@app.get("/admin")
-async def admin_panel(request: Request):
-    if not request.session.get("auth"):
-        return RedirectResponse("/admin/login")
-
-    async with aiosqlite.connect("bot.db") as db:
-        db.row_factory = aiosqlite.Row
-        cursor = await db.execute("SELECT * FROM requests ORDER BY created_at DESC")
-        requests = await cursor.fetchall()
-        enriched = []
-        for row in requests:
-            cur_docs = await db.execute("SELECT * FROM documents WHERE request_id = ?", (row["id"],))
-            documents = await cur_docs.fetchall()
-            enriched.append({**dict(row), "documents": [dict(d) for d in documents]})
-
-    return templates.TemplateResponse("admin.html", {
-        "request": request,
-        "requests": enriched,
-        "bot_token": os.getenv("BOT_TOKEN")
-    })
 
 @app.get("/admin/api/requests")
 async def api_requests(request: Request):
     if not request.session.get("auth"):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise HTTPException(status_code=401)
+    # query DB and return JSON
 
-    async with aiosqlite.connect("bot.db") as db:
-        db.row_factory = aiosqlite.Row
-        cursor = await db.execute("SELECT * FROM requests ORDER BY created_at DESC")
-        requests = await cursor.fetchall()
-
-        result = []
-        for row in requests:
-            cur_docs = await db.execute("SELECT * FROM documents WHERE request_id = ?", (row["id"],))
-            docs = await cur_docs.fetchall()
-            result.append({**dict(row), "documents": [dict(d) for d in docs]})
-
-    return result
 @app.post("/admin/update")
 async def update_request(
     request: Request,
@@ -432,42 +376,25 @@ async def update_request(
     reply: str = Form("")
 ):
     if not request.session.get("auth"):
-        return RedirectResponse("/admin-react", status_code=302)
-
+        raise HTTPException(status_code=401)
     try:
         async with aiosqlite.connect("bot.db") as db:
-            db.row_factory = aiosqlite.Row  # ← добавь это!
-            await db.execute(
-                "UPDATE requests SET status = ? WHERE id = ?",
-                (status, request_id)
-            )
+            db.row_factory = aiosqlite.Row
+            await db.execute("UPDATE requests SET status = ? WHERE id = ?", (status, request_id))
             await db.commit()
-
             if reply:
-                cursor = await db.execute("SELECT user_id FROM requests WHERE id = ?", (request_id,))
-                row = await cursor.fetchone()
-
-                if row and row["user_id"]:
-                    try:
-                        await bot.send_message(
-                            row["user_id"],
-                            f"📩 Ответ администратора:\n\n{reply}"
-                        )
-                    except Exception as send_err:
-                        logger.error(f"Ошибка при отправке сообщения: {send_err}")
-                else:
-                    logger.warning(f"⚠️ Не найден user_id для заявки {request_id}")
-
-        return RedirectResponse("/admin", status_code=303)
-
+                # send message
+        return JSONResponse({"ok": True})
     except Exception as e:
-        logger.error(f"❌ Ошибка при обновлении заявки: {e}")
-        return RedirectResponse("/admin", status_code=500)
+        logger.error(f"Ошибка при обновлении заявки: {e}")
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 @app.get("/admin/logout")
 async def admin_logout(request: Request):
     request.session.clear()
-    return RedirectResponse("/admin/login")
+    return RedirectResponse("/admin-react", status_code=302)
+    
+            
     
 @app.post("/webhook")
 async def webhook_handler(request: Request):
