@@ -21,8 +21,6 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-templates = Jinja2Templates(directory="templates")
-
 import httpx
 
 # Load environment variables
@@ -89,56 +87,11 @@ bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=storage)
 
 # Initialize FastAPI
-
-from contextlib import asynccontextmanager
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    webhook_set = False
-    try:
-        await bot.delete_webhook()
-        await bot.set_webhook(
-            url=WEBHOOK_URL,
-            drop_pending_updates=True,
-            allowed_updates=dp.resolve_used_update_types()
-        )
-        webhook_set = True
-        logging.info(f"✅ Webhook successfully set to: {WEBHOOK_URL}")
-    except Exception as e:
-        logging.critical(f"❌ Failed to set webhook: {e}")
-        raise
-    try:
-        yield
-    finally:
-        try:
-            if webhook_set:
-                await bot.delete_webhook()
-                logging.info("🗑 Webhook deleted")
-        except Exception as e:
-            logging.error(f"⚠️ Error deleting webhook: {e}")
-        try:
-            await bot.session.close()
-            logging.info("🤖 Bot session closed")
-        except Exception as e:
-            logging.error(f"⚠️ Error closing bot session: {e}")
-        try:
-            await storage.close()
-            logging.info("🗄 Redis storage closed")
-        except Exception as e:
-            logging.error(f"⚠️ Error closing storage: {e}")
-        try:
-            conn.close()
-            logging.info("🔒 Database connection closed")
-        except Exception as e:
-            logging.error(f"⚠️ Error closing database: {e}")
-
-
-app = FastAPI(lifespan=lifespan)
-app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app = FastAPI()
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))  # Уберите значение по умолчанию
 
 # Конфигурация вебхука
-WEBHOOK_PATH = f"/webhook/{quote(API_TOKEN)}"  # Экранируем :
+WEBHOOK_PATH = f"/webhook/{API_TOKEN.replace(':', '%3A')}"  # Экранируем :
 WEBHOOK_URL = f"{APP_URL}{WEBHOOK_PATH}"
 # Translation setup
 translations = {
@@ -391,9 +344,8 @@ async def lifespan(app: FastAPI):
             logging.error(f"⚠️ Error closing database: {e}")
 
 # Webhook handler
-@app.post("/webhook/7175415997%3AAAFVa0zhai_iN55S7bZjPmK6n6BFgZ4D_Wg")
+@app.post(WEBHOOK_PATH)
 async def handle_webhook(update: dict):
-    logging.info("✅ Webhook called")
     try:
         telegram_update = types.Update(**update)
         await dp.feed_update(bot=bot, update=telegram_update)
@@ -402,17 +354,4 @@ async def handle_webhook(update: dict):
         logging.error(f"Webhook error: {e}")
         return {"status": "error", "details": str(e)}
 
-@app.get("/admin/api/requests")
-async def get_requests(request: Request):
-    if not request.session.get("admin"):
-        return JSONResponse(status_code=403, content={"error": "Unauthorized"})
 
-    cursor = conn.execute("SELECT * FROM requests ORDER BY created_at DESC")
-    rows = cursor.fetchall()
-    requests_data = [dict(row) for row in rows]
-    return {"requests": requests_data}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-    
