@@ -533,8 +533,8 @@ async def download_file(file_id: str):
                     "Content-Disposition": f"attachment; filename={filename}"
                 })
     except Exception as e:
-    logger.error(f"Ошибка при скачивании файла: {e}")
-    raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Ошибка при скачивании файла: {e}")
+        raise  HTTPException(status_code=500, detail=str(e))
         
 
 if __name__ == "__main__":
