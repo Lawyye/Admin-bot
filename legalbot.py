@@ -2,6 +2,7 @@ import logging
 import os
 from datetime import datetime, timezone
 import sqlite3
+from contextlib import asynccontextmanager
 from fastapi import UploadFile, File
 from aiogram.filters import Command
 from aiogram import Bot, Dispatcher, types, F
@@ -398,7 +399,9 @@ async def lifespan(app: FastAPI):
     yield
     await on_shutdown()
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan)  # Используем lifespan
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
