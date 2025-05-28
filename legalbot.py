@@ -131,9 +131,9 @@ async def lifespan(app: FastAPI):
             logging.error(f"⚠️ Error closing database: {e}")
 
 
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app = FastAPI(lifespan=lifespan)  # Уберите значение по умолчанию
 
 # Конфигурация вебхука
 WEBHOOK_PATH = f"/webhook/{API_TOKEN.replace(':', '%3A')}"  # Экранируем :
