@@ -24,11 +24,13 @@ function notify(msg, type = "info") {
 
 // === LOGOUT ===
 function logout() {
+    console.log("Logging out...");
     fetch('/admin/logout', {
         method: 'POST',
         credentials: 'same-origin'
     })
     .then(response => {
+        console.log("Logout response:", response);
         if (response.redirected) {
             window.location.href = response.url;
         } else {
@@ -170,21 +172,21 @@ setInterval(loadRequests, 5000);
 window.addEventListener("load", loadRequests);
 
 function toggleTheme() {
+    console.log("Toggling theme...");
     document.body.classList.toggle("dark-theme");
     const isDark = document.body.classList.contains("dark-theme");
+    console.log("Dark theme:", isDark);
     localStorage.setItem("theme", isDark ? "dark" : "light");
     document.getElementById("theme-icon").textContent = isDark ? "☀️" : "🌙";
 }
 
-// Обновлённая функция toggleMobileMenu()
 function toggleMobileMenu() {
     const menu = document.getElementById('mobileMenu');
     const toggleBtn = document.querySelector('.mobile-menu-toggle');
-
+    
     menu.classList.toggle('active');
     toggleBtn.textContent = menu.classList.contains('active') ? '✕' : '☰';
-
-    // Закрытие меню при клике вне его области
+    
     if (menu.classList.contains('active')) {
         document.addEventListener('click', closeMenuOnClickOutside);
     } else {
@@ -195,7 +197,7 @@ function toggleMobileMenu() {
 function closeMenuOnClickOutside(event) {
     const menu = document.getElementById('mobileMenu');
     const toggleBtn = document.querySelector('.mobile-menu-toggle');
-
+    
     if (!menu.contains(event.target) && !toggleBtn.contains(event.target)) {
         menu.classList.remove('active');
         toggleBtn.textContent = '☰';
