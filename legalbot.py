@@ -30,7 +30,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(name) 
 load_dotenv()
 
-Логирование версий библиотек
+#Логирование версий библиотек
 
 import aiogram 
 import fastapi 
