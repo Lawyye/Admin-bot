@@ -1,4 +1,3 @@
-
 // === GLOBALS ===
 let allRequests = [];
 let filterSearch = "";
@@ -7,11 +6,11 @@ let filterStatus = "";
 // === TOOLS ===
 function escapeHtml(str) {
     return str.replace(/[&<>"']/g, m => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;'
+        '&': '&',
+        '<': '<',
+        '>': '>',
+        '"': '"',
+        "'": '''
     })[m]);
 }
 
@@ -53,12 +52,16 @@ function showLoading(isLoading) {
 async function loadRequests() {
     showLoading(true);
     try {
+        console.log("Loading requests...");
         const res = await fetch(`/admin/api/requests?search=${encodeURIComponent(filterSearch)}&status_f=${encodeURIComponent(filterStatus)}`);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
-        allRequests = data.requests;
+        console.log("Received data:", data);
+        allRequests = data.requests || [];
         renderRequests();
         updateStats();
     } catch (e) {
+        console.error("Error loading requests:", e);
         notify("Ошибка загрузки заявок: " + e.message, "error");
     } finally {
         showLoading(false);
@@ -177,10 +180,10 @@ function toggleTheme() {
 function toggleMobileMenu() {
     const menu = document.getElementById('mobileMenu');
     const toggleBtn = document.querySelector('.mobile-menu-toggle');
-    
+
     menu.classList.toggle('active');
     toggleBtn.textContent = menu.classList.contains('active') ? '✕' : '☰';
-    
+
     // Закрытие меню при клике вне его области
     if (menu.classList.contains('active')) {
         document.addEventListener('click', closeMenuOnClickOutside);
@@ -192,7 +195,7 @@ function toggleMobileMenu() {
 function closeMenuOnClickOutside(event) {
     const menu = document.getElementById('mobileMenu');
     const toggleBtn = document.querySelector('.mobile-menu-toggle');
-    
+
     if (!menu.contains(event.target) && !toggleBtn.contains(event.target)) {
         menu.classList.remove('active');
         toggleBtn.textContent = '☰';
