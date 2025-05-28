@@ -537,6 +537,12 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting LegalBot...")
     webhook_set = False
     try:
+
+        await storage.redis.ping()
+        logger.info("✅ Redis connection successful")
+    except Exception as e:
+        logger.error(f"❌ Redis connection failed: {e}")
+        raise
         # Delete existing webhook
         await bot.delete_webhook(drop_pending_updates=True)
         logger.info("🗑 Old webhook deleted")
