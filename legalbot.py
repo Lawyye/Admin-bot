@@ -378,28 +378,6 @@ async def admin_auth(
         {"request": request, "error": "Неверные данные"},
         status_code=401
     )
-@app.post("/admin/update")
-async def update_request(
-    request: Request,
-    request_id: int = Form(...),
-    status: str = Form(...),
-    reply: str = Form("")
-):
-    if not request.session.get("auth"):
-        return RedirectResponse("/admin/login", status_code=302)
-
-    async with aiosqlite.connect("bot.db") as db:
-        await db.execute("UPDATE requests SET status = ? WHERE id = ?", (status, request_id))
-        await db.commit()
-
-        if reply:
-            cursor = await db.execute("SELECT user_id FROM requests WHERE id = ?", (request_id,))
-            row = await cursor.fetchone()
-            if row:
-                await bot.send_message(row["user_id"], f"📩 Ответ администратора:\n\n{reply}")
-
-    return RedirectResponse("/admin", status_code=303)
-    
 
 @app.get("/admin")
 async def admin_panel(request: Request):
@@ -422,6 +400,39 @@ async def admin_panel(request: Request):
         "bot_token": os.getenv("BOT_TOKEN")
     })
 
+@app.post("/admin/update")
+async def update_request(
+    request: Request,
+    request_id: int = Form(...),
+    status: str = Form(...),
+    reply: str = Form("")
+):
+    if not request.session.get("auth"):
+        return RedirectResponse("/admin/login", status_code=302)
+
+    try:
+        async with aiosqlite.connect("bot.db") as db:
+            await db.execute("UPDATE requests SET status = ? WHERE id = ?", (status, request_id))
+            await db.commit()
+
+            if reply:
+                cursor = await db.execute("SELECT user_id FROM requests WHERE id = ?", (request_id,))
+                row = await cursor.fetchone()
+
+                if row and row["user_id"]:
+                    try:
+                        await bot.send_message(row["user_id"], f"📩 Ответ администратора:\n\n{reply}")
+                    except Exception as send_err:
+                        logger.error(f"❌ Ошибка при отправке сообщения пользователю: {send_err}")
+                else:
+                    logger.warning(f"⚠️ Не найден user_id для request_id {request_id}")
+
+        return RedirectResponse("/admin", status_code=303)
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка при обновлении заявки: {e}")
+        return RedirectResponse("/admin", status_code=500)
+        
 @app.post("/webhook")
 async def webhook_handler(request: Request):
     try:
