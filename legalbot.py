@@ -10,7 +10,7 @@ from urllib.parse import quote
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
-from aiogram.filters.state import StateFilter  # Добавлен импорт StateFilter
+from aiogram.filters.state import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
@@ -532,17 +532,19 @@ async def set_language(message: types.Message, state: FSMContext):
     )
 
 # Initialize FastAPI
+@asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
     logger.info("🚀 Starting LegalBot...")
-    webhook_set = False
     try:
-
+        # Проверка подключения к Redis
         await storage.redis.ping()
         logger.info("✅ Redis connection successful")
     except Exception as e:
         logger.error(f"❌ Redis connection failed: {e}")
         raise
+    
+    try:
         # Delete existing webhook
         await bot.delete_webhook(drop_pending_updates=True)
         logger.info("🗑 Old webhook deleted")
@@ -553,7 +555,6 @@ async def lifespan(app: FastAPI):
             drop_pending_updates=True,
             allowed_updates=dp.resolve_used_update_types()
         )
-        webhook_set = True
         logger.info(f"✅ Webhook successfully set to: {WEBHOOK_URL}")
         
         # Test webhook
@@ -572,9 +573,8 @@ async def lifespan(app: FastAPI):
         logger.info("🛑 Shutting down LegalBot...")
         
         try:
-            if webhook_set:
-                await bot.delete_webhook(drop_pending_updates=True)
-                logger.info("🗑 Webhook deleted")
+            await bot.delete_webhook(drop_pending_updates=True)
+            logger.info("🗑 Webhook deleted")
         except Exception as e:
             logger.error(f"⚠️ Error deleting webhook: {e}")
 
@@ -596,7 +596,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"⚠️ Error closing database: {e}")
 
-app = FastAPI(lifespan=asynccontextmanager(lifespan))
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 # Configure templates and static files
@@ -604,10 +604,9 @@ templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Webhook configuration
-logger.info(f"Loaded API_TOKEN: {API_TOKEN}")
-WEBHOOK_PATH = f"/webhook/{API_TOKEN.replace(':', '%3A')}"
-logger.info(f"Webhook path: {WEBHOOK_PATH}")
+WEBHOOK_PATH = "/webhook"  # Упрощаем путь для теста
 WEBHOOK_URL = f"{APP_URL}{WEBHOOK_PATH}"
+logger.info(f"Webhook handler registered for path: {WEBHOOK_PATH}")  # Логирование регистрации маршрута
 
 # Admin API routes
 @app.get("/admin/api/requests")
