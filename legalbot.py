@@ -256,6 +256,10 @@ async def admin_panel(request: Request):
     if not request.session.get("auth"):
         return RedirectResponse("/admin/login")
     return templates.TemplateResponse("admin.html", {"request": request})
+    # Добавьте этот код в раздел с маршрутами FastAPI
+@app.get("/")
+async def root():
+    return RedirectResponse("/admin/login", status_code=302)
 
 # ===== ЗАПУСК =====
 if __name__ == "__main__":
