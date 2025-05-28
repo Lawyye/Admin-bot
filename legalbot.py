@@ -21,6 +21,8 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
+templates = Jinja2Templates(directory="templates")
+
 import httpx
 
 # Load environment variables
