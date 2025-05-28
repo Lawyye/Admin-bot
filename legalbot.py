@@ -385,9 +385,15 @@ async def admin_login_post(
     password: str = Form(...),
     request: Request = None
 ):
-    if username == os.getenv('ADMIN_USERNAME', 'admin') and password == os.getenv('ADMIN_PASSWORD', 'password'):
-        request.session["admin"] = True
-        return RedirectResponse("/admin", status_code=302)
+    valid_admins = [
+        {"username": os.getenv('ADMIN_USERNAME1', 'nurbol'), "password": os.getenv('ADMIN_PASSWORD1', 'marzhan2508')},
+        {"username": os.getenv('ADMIN_USERNAME2', 'vlad'), "password": os.getenv('ADMIN_PASSWORD2', 'archiboss20052024')}
+    ]
+    logger.info(f"Login attempt: username={username}, password={password}")
+    for admin in valid_admins:
+        if username == admin["username"] and password == admin["password"]:
+            request.session["admin"] = True
+            return RedirectResponse("/admin", status_code=302)
     return templates.TemplateResponse("admin_login.html", {"request": request, "error": "Неверные учетные данные"})
 
 @app.get("/admin/logout")
