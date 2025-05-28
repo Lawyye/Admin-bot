@@ -27,9 +27,9 @@ load_dotenv()
 
 # Настройка бота
 API_TOKEN = os.getenv('BOT_TOKEN')
+ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
 logger.info(f"Loaded API_TOKEN: {API_TOKEN}")
 
-# Проверка токена перед созданием бота
 if not API_TOKEN:
     logger.error("API_TOKEN is empty. Please set BOT_TOKEN in .env file.")
     raise ValueError("API_TOKEN is empty. Please set BOT_TOKEN in .env file.")
@@ -110,17 +110,10 @@ class RequestForm(StatesGroup):
     waiting_for_message = State()
     attach_docs = State()
 
-# Получение языка
 async def get_lang(state: FSMContext, user_id: int) -> str:
     data = await state.get_data()
-    if 'lang' not in data:
-        lang = 'ru'  # Значение по умолчанию
-        await state.update_data(lang=lang)
-    else:
-        lang = data['lang']
-    return lang
+    return data.get('lang', 'ru')
 
-# Клавиатуры
 def get_menu_kb(user_id: int, lang: str) -> ReplyKeyboardMarkup:
     t = translations[lang]
     keyboard = [
@@ -129,16 +122,14 @@ def get_menu_kb(user_id: int, lang: str) -> ReplyKeyboardMarkup:
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
-# Обработчики бота
 @dp.message(Command("start"))
 async def start_command(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-    lang = 'ru'  # Значение по умолчанию
-    await state.update_data(lang=lang)
-    t = translations[lang]
+    await state.update_data(lang='ru')
+    t = translations['ru']
     await message.answer(
         t['start'],
-        reply_markup=get_menu_kb(user_id, lang)
+        reply_markup=get_menu_kb(user_id, 'ru')
     )
 
 @dp.message(F.text.in_(["🇷🇺 Русский", "🇬🇧 English"]))
@@ -156,7 +147,6 @@ async def set_lang(message: types.Message, state: FSMContext):
 async def start_request(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
-    t = translations[lang]
     
     await state.set_state(RequestForm.waiting_for_name)
     await message.answer(
@@ -167,9 +157,6 @@ async def start_request(message: types.Message, state: FSMContext):
 @dp.message(RequestForm.waiting_for_name)
 async def process_name(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-    lang = await get_lang(state, user_id)
-    t = translations[lang]
-    
     await state.update_data(name=message.text)
     await state.set_state(RequestForm.waiting_for_phone)
     await message.answer(
@@ -180,9 +167,6 @@ async def process_name(message: types.Message, state: FSMContext):
 @dp.message(RequestForm.waiting_for_phone)
 async def process_phone(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-    lang = await get_lang(state, user_id)
-    t = translations[lang]
-    
     await state.update_data(phone=message.text)
     await state.set_state(RequestForm.waiting_for_message)
     await message.answer(
@@ -193,9 +177,6 @@ async def process_phone(message: types.Message, state: FSMContext):
 @dp.message(RequestForm.waiting_for_message)
 async def process_message(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-    lang = await get_lang(state, user_id)
-    t = translations[lang]
-    
     await state.update_data(message_text=message.text)
     await state.set_state(RequestForm.attach_docs)
     await message.answer(
@@ -203,12 +184,9 @@ async def process_message(message: types.Message, state: FSMContext):
         reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton("⬅️ Назад"), KeyboardButton("/done")]], resize_keyboard=True)
     )
 
-@dp.message(RequestForm.attach_docs, content_types=types.ContentType.DOCUMENT)
+@dp.message(RequestForm.attach_docs, F.document)
 async def process_document(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-    lang = await get_lang(state, user_id)
-    t = translations[lang]
-    
     document = {
         'file_id': message.document.file_id,
         'file_name': message.document.file_name
@@ -246,19 +224,16 @@ async def finish_request(message: types.Message, state: FSMContext):
     
     data = await state.get_data()
     
-    # Проверка наличия всех необходимых данных
     required_fields = ['name', 'phone', 'message_text']
     if not all(key in data for key in required_fields):
         await message.answer(
-            t.get('error_missing_data', "Ошибка: не все данные заполнены. Пожалуйста, начните заново."),
+            t['error_missing_data'],
             reply_markup=get_menu_kb(user_id, lang)
         )
         await state.clear()
         return
     
-    # Save to database
     with conn:
-        logger.info(f"Saving request for user {user_id}: {data}")
         cursor = conn.execute(
             """INSERT INTO requests (user_id, name, phone, message, created_at, status)
                VALUES (?, ?, ?, ?, ?, ?)""",
@@ -272,9 +247,7 @@ async def finish_request(message: types.Message, state: FSMContext):
             )
         )
         request_id = cursor.lastrowid
-        logger.info(f"Request saved with ID: {request_id}")
         
-        # Save documents if any
         documents = data.get('documents', [])
         for doc in documents:
             conn.execute(
@@ -282,9 +255,7 @@ async def finish_request(message: types.Message, state: FSMContext):
                    VALUES (?, ?, ?, ?)""",
                 (request_id, doc['file_id'], doc['file_name'], datetime.now(timezone.utc).isoformat())
             )
-        logger.info(f"Saved {len(documents)} documents for request {request_id}")
 
-    # Notify admin
     if ADMIN_CHAT_ID:
         admin_text = f"""
 🆕 Новая заявка #{request_id}
@@ -296,8 +267,6 @@ async def finish_request(message: types.Message, state: FSMContext):
 """
         try:
             await bot.send_message(ADMIN_CHAT_ID, admin_text)
-            
-            # Send documents to admin
             for doc in documents:
                 await bot.send_document(
                     ADMIN_CHAT_ID,
@@ -330,9 +299,8 @@ async def contacts(message: types.Message, state: FSMContext):
     lang = await get_lang(state, user_id)
     t = translations[lang]
     
-    contacts_text = t.get('contacts', "📞 Наши контакты:\nТелефон: +123456789\nEmail: support@legalbot.com")
     await message.answer(
-        contacts_text,
+        t['contacts'],
         reply_markup=get_menu_kb(user_id, lang)
     )
 
@@ -370,7 +338,6 @@ async def get_requests(request: Request):
     if not request.session.get("admin"):
         return JSONResponse({"error": "Unauthorized"}, status_code=403)
     
-    logger.info("Fetching requests from database")
     rows = conn.execute("""
         SELECT r.*, GROUP_CONCAT(d.file_name) as documents
         FROM requests r
@@ -378,7 +345,6 @@ async def get_requests(request: Request):
         GROUP BY r.id
         ORDER BY r.created_at DESC
     """).fetchall()
-    logger.info(f"Found {len(rows)} rows in database")
     
     requests = []
     for row in rows:
@@ -393,7 +359,6 @@ async def get_requests(request: Request):
             'documents': row['documents'].split(',') if row['documents'] else []
         })
     
-    logger.info(f"Returning {len(requests)} requests")
     return {"requests": requests}
 
 # Webhook обработчик
