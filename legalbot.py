@@ -389,8 +389,9 @@ async def lifespan(app: FastAPI):
             logging.error(f"⚠️ Error closing database: {e}")
 
 # Webhook handler
-@app.post(WEBHOOK_PATH)
+@app.post("/webhook/7175415997%3AAAFVa0zhai_iN55S7bZjPmK6n6BFgZ4D_Wg")
 async def handle_webhook(update: dict):
+    logging.info("✅ Webhook called")
     try:
         telegram_update = types.Update(**update)
         await dp.feed_update(bot=bot, update=telegram_update)
@@ -398,7 +399,6 @@ async def handle_webhook(update: dict):
     except Exception as e:
         logging.error(f"Webhook error: {e}")
         return {"status": "error", "details": str(e)}
-
 
 @app.get("/admin/api/requests")
 async def get_requests(request: Request):
