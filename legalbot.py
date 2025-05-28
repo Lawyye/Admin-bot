@@ -26,6 +26,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 load_dotenv()
 
+# Логирование версий библиотек
+import aiogram
+import fastapi
+logger.info(f"aiogram version: {aiogram.__version__}")
+logger.info(f"fastapi version: {fastapi.__version__}")
+
 # ===== ИНИЦИАЛИЗАЦИЯ БОТА =====
 API_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
@@ -33,7 +39,8 @@ ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
 if not API_TOKEN:
     raise ValueError("BOT_TOKEN не установлен в .env")
 
-bot = Bot(token=API_TOKEN)
+# Создаем бота с parse_mode по умолчанию
+bot = Bot(token=API_TOKEN, parse_mode="HTML")
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
@@ -159,7 +166,6 @@ async def finish_handler(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = await get_lang(state)
     
-    # Сохранение в БД
     with conn:
         cursor = conn.execute(
             """INSERT INTO requests 
@@ -188,15 +194,32 @@ async def finish_handler(message: types.Message, state: FSMContext):
 # ===== FASTAPI НАСТРОЙКА =====
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await bot.delete_webhook()
-    WEBHOOK_URL = urljoin(
-        os.getenv('WEBHOOK_HOST', 'https://web-production-bb98.up.railway.app'), 
-        '/webhook'
-    )
-    await bot.set_webhook(WEBHOOK_URL)
-    logger.info(f"Webhook установлен: {WEBHOOK_URL}")
-    yield
-    await bot.delete_webhook()
+    try:
+        webhook_path = '/webhook'
+        webhook_url = urljoin(
+            os.getenv('WEBHOOK_HOST', 'https://web-production-bb98.up.railway.app'),
+            webhook_path
+        )
+        
+        # Удаляем старый webhook
+        await bot.delete_webhook(drop_pending_updates=True)
+        
+        # Устанавливаем новый webhook
+        webhook_info = await bot.set_webhook(
+            url=webhook_url,
+            allowed_updates=['message', 'callback_query']
+        )
+        
+        logger.info(f"Webhook установлен: {webhook_url}")
+        logger.info(f"Webhook info: {webhook_info}")
+        
+        yield
+        
+        # Удаляем webhook при завершении
+        await bot.delete_webhook()
+    except Exception as e:
+        logger.error(f"Lifespan error: {e}")
+        raise
 
 app = FastAPI(lifespan=lifespan)
 templates = Jinja2Templates(directory="templates")
@@ -215,25 +238,40 @@ app.add_middleware(
 @app.post("/webhook")
 async def webhook_handler(request: Request):
     try:
-        # Получаем JSON данные из запроса
         update_data = await request.json()
-        # Создаем объект Update правильным способом
-        update = types.Update.model_validate(update_data)
+        logger.info(f"Received update data: {update_data}")
+        
+        try:
+            update = types.Update.model_validate(update_data)
+        except Exception as e:
+            logger.error(f"Error creating Update object: {e}")
+            update = types.Update(**update_data)
+        
+        logger.info(f"Created update object: {type(update)}")
+        
         await dp.feed_update(bot, update)
         return {"ok": True}
     except Exception as e:
-        logger.error(f"Ошибка: {str(e)}")
+        logger.error(f"Webhook error: {str(e)}\nUpdate data: {update_data if 'update_data' in locals() else 'No data'}")
         return JSONResponse(
             status_code=500,
-            content={"ok": False, "error": str(e)}
+            content={
+                "ok": False, 
+                "error": str(e),
+                "update_data": update_data if 'update_data' in locals() else None
+            }
         )
 
 # ===== АДМИН-ПАНЕЛЬ =====
 app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET', 'secret'))
 
+@app.get("/")
+async def root():
+    return RedirectResponse("/admin/login", status_code=302)
+
 @app.get("/admin/login")
 async def admin_login(request: Request):
-    return templates.TemplateResponse("login_admin.html", {"request": request})
+    return templates.TemplateResponse("admin_login.html", {"request": request})
 
 @app.post("/admin/login")
 async def admin_auth(
@@ -259,10 +297,6 @@ async def admin_panel(request: Request):
     if not request.session.get("auth"):
         return RedirectResponse("/admin/login")
     return templates.TemplateResponse("admin.html", {"request": request})
-    # Добавьте этот код в раздел с маршрутами FastAPI
-@app.get("/")
-async def root():
-    return RedirectResponse("/admin/login", status_code=302)
 
 # ===== ЗАПУСК =====
 if __name__ == "__main__":
