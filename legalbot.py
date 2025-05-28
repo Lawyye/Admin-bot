@@ -353,7 +353,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/admin-react", StaticFiles(directory="static/admin-react"), name="admin-react")
+app.mount("/admin-react", StaticFiles(directory="static/admin-react", html=True), name="admin-react")
 
 # ===== CORS =====
 app.add_middleware(
