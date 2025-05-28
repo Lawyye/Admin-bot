@@ -20,7 +20,7 @@
             --shadow: 0 2px 10px rgba(0,0,0,0.1);
             --shadow-hover: 0 4px 20px rgba(0,0,0,0.15);
         }
-
+        
         .dark-theme {
             --bg-color: #1a1a1a;
             --text-color: #e0e0e0;
@@ -32,13 +32,13 @@
             --shadow: 0 2px 10px rgba(0,0,0,0.3);
             --shadow-hover: 0 4px 20px rgba(0,0,0,0.4);
         }
-
+        
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-
+        
         body {
             background: var(--bg-color);
             color: var(--text-color);
@@ -46,13 +46,13 @@
             transition: all 0.3s ease;
             line-height: 1.6;
         }
-
+        
         .container {
             max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
         }
-
+        
         .header {
             display: flex;
             justify-content: space-between;
@@ -64,19 +64,19 @@
             box-shadow: var(--shadow);
             position: relative;
         }
-
+        
         .header h1 {
             font-size: 24px;
             font-weight: 600;
             color: var(--primary-color);
         }
-
+        
         .header-controls {
             display: flex;
             align-items: center;
             gap: 15px;
         }
-
+        
         .theme-toggle, .mobile-menu-toggle {
             background: none;
             border: none;
@@ -87,22 +87,22 @@
             border-radius: 8px;
             transition: all 0.2s ease;
         }
-
+        
         .theme-toggle:hover, .mobile-menu-toggle:hover {
             background: var(--hover-color);
         }
-
+        
         .mobile-menu-toggle {
             display: none;
         }
-
+        
         .stats-cards {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
-
+        
         .stat-card {
             background: var(--card-bg);
             padding: 20px;
@@ -110,32 +110,32 @@
             box-shadow: var(--shadow);
             transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
-
+        
         .stat-card:hover {
             transform: translateY(-2px);
             box-shadow: var(--shadow-hover);
         }
-
+        
         .stat-number {
             font-size: 28px;
             font-weight: bold;
             margin-bottom: 5px;
         }
-
+        
         .stat-label {
             color: #666;
             font-size: 14px;
         }
-
+        
         .dark-theme .stat-label {
             color: #999;
         }
-
+        
         .stat-new .stat-number { color: var(--success-color); }
         .stat-progress .stat-number { color: var(--warning-color); }
         .stat-done .stat-number { color: var(--info-color); }
         .stat-total .stat-number { color: var(--primary-color); }
-
+        
         .mobile-menu {
             display: none;
             position: absolute;
@@ -149,11 +149,11 @@
             z-index: 1000;
             min-width: 250px;
         }
-
+        
         .mobile-menu.active {
             display: block;
         }
-
+        
         .mobile-menu input,
         .mobile-menu select,
         .mobile-menu button {
@@ -166,7 +166,7 @@
             color: var(--text-color);
             font-size: 14px;
         }
-
+        
         .filters {
             display: flex;
             gap: 15px;
@@ -178,7 +178,7 @@
             align-items: center;
             flex-wrap: wrap;
         }
-
+        
         .filters input,
         .filters select {
             padding: 12px 16px;
@@ -189,31 +189,31 @@
             font-size: 14px;
             transition: border-color 0.2s ease;
         }
-
+        
         .filters input:focus,
         .filters select:focus {
             outline: none;
             border-color: var(--primary-color);
         }
-
+        
         .table-container {
             background: var(--table-bg);
             border-radius: 12px;
             overflow: hidden;
             box-shadow: var(--shadow);
         }
-
+        
         table {
             width: 100%;
             border-collapse: collapse;
         }
-
+        
         th, td {
             padding: 16px 12px;
             text-align: left;
             border-bottom: 1px solid var(--border-color);
         }
-
+        
         th {
             background: var(--th-bg);
             font-weight: 600;
@@ -221,19 +221,19 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-
+        
         tr {
             transition: background-color 0.2s ease;
         }
-
+        
         tr:hover {
             background: var(--hover-color);
         }
-
+        
         tr:last-child td {
             border-bottom: none;
         }
-
+        
         .btn {
             background: var(--primary-color);
             color: white;
@@ -248,18 +248,18 @@
             text-decoration: none;
             display: inline-block;
         }
-
+        
         .btn:hover {
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
-
+        
         .btn-success { background: var(--success-color); }
         .btn-warning { background: var(--warning-color); color: #333; }
         .btn-danger { background: var(--danger-color); }
         .btn-info { background: var(--info-color); }
         .btn-secondary { background: #6c757d; }
-
+        
         .status-badge {
             padding: 4px 12px;
             border-radius: 20px;
@@ -268,25 +268,25 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-
+        
         .status-new {
             background: rgba(40, 167, 69, 0.1);
             color: var(--success-color);
             border: 1px solid rgba(40, 167, 69, 0.2);
         }
-
+        
         .status-inwork {
             background: rgba(255, 193, 7, 0.1);
             color: #856404;
             border: 1px solid rgba(255, 193, 7, 0.2);
         }
-
+        
         .status-done {
             background: rgba(108, 117, 125, 0.1);
             color: #495057;
             border: 1px solid rgba(108, 117, 125, 0.2);
         }
-
+        
         .modal {
             position: fixed;
             top: 0;
@@ -299,12 +299,12 @@
             visibility: hidden;
             transition: all 0.3s ease;
         }
-
+        
         .modal.active {
             opacity: 1;
             visibility: visible;
         }
-
+        
         .modal-content {
             position: absolute;
             top: 50%;
@@ -318,23 +318,23 @@
             box-shadow: var(--shadow-hover);
             transition: transform 0.3s ease;
         }
-
+        
         .modal.active .modal-content {
             transform: translate(-50%, -50%) scale(1);
         }
-
+        
         .modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
         }
-
+        
         .modal-title {
             font-size: 18px;
             font-weight: 600;
         }
-
+        
         .close {
             background: none;
             border: none;
@@ -345,21 +345,21 @@
             border-radius: 50%;
             transition: background-color 0.2s ease;
         }
-
+        
         .close:hover {
             background: var(--hover-color);
         }
-
+        
         .form-group {
             margin-bottom: 20px;
         }
-
+        
         .form-group label {
             display: block;
             margin-bottom: 8px;
             font-weight: 500;
         }
-
+        
         .form-group textarea {
             width: 100%;
             padding: 12px;
@@ -372,17 +372,17 @@
             min-height: 100px;
             transition: border-color 0.2s ease;
         }
-
+        
         .form-group textarea:focus {
             outline: none;
             border-color: var(--primary-color);
         }
-
+        
         .loading {
             opacity: 0.6;
             pointer-events: none;
         }
-
+        
         .notification {
             position: fixed;
             top: 20px;
@@ -395,59 +395,59 @@
             transform: translateX(400px);
             transition: transform 0.3s ease;
         }
-
+        
         .notification.show {
             transform: translateX(0);
         }
-
+        
         .notification.success { background: var(--success-color); }
         .notification.error { background: var(--danger-color); }
         .notification.info { background: var(--info-color); }
-
+        
         @media (max-width: 768px) {
             .mobile-menu-toggle {
                 display: block;
             }
-
+            
             .header-controls .btn {
                 display: none;
             }
-
+            
             .filters {
                 display: none;
             }
-
+            
             .stats-cards {
                 grid-template-columns: repeat(2, 1fr);
             }
-
+            
             .table-container {
                 overflow-x: auto;
             }
-
+            
             table {
                 min-width: 800px;
                 font-size: 14px;
             }
-
+            
             th, td {
                 padding: 12px 8px;
             }
-
+            
             .header h1 {
                 font-size: 20px;
             }
         }
-
+        
         @media (max-width: 480px) {
             .container {
                 padding: 15px;
             }
-
+            
             .stats-cards {
                 grid-template-columns: 1fr;
             }
-
+            
             .modal-content {
                 padding: 20px;
             }
@@ -463,7 +463,7 @@
                 <button class="btn btn-danger" onclick="logout()" id="desktop-logout">Выйти</button>
                 <button class="mobile-menu-toggle" id="mobileMenuToggle" onclick="toggleMobileMenu()">☰</button>
             </div>
-
+            
             <div class="mobile-menu" id="mobileMenu">
                 <button class="btn btn-danger" onclick="logout()">Выйти</button>
                 <input type="text" id="mobile-search" placeholder="🔍 Поиск..." onkeyup="filterRequests()">
@@ -502,7 +502,7 @@
                 <option value="">Все статусы</option>
                 <option value="new">Новые</option>
                 <option value="inwork">В работе</option>
-                <option value="done">Завершено</option>
+                <option value="done">Выполнено</option>
             </select>
             <button class="btn" onclick="loadRequests()">🔄 Обновить</button>
             <button class="btn btn-success" onclick="exportData()">📥 Экспорт</button>
@@ -571,14 +571,6 @@
         }
 
         function setupEventListeners() {
-            document.addEventListener('click', function(event) {
-                const menu = document.getElementById('mobileMenu');
-                const toggle = document.querySelector('.mobile-menu-toggle');
-                if (!menu.contains(event.target) && !toggle.contains(event.target)) {
-                    menu.classList.remove('active');
-                }
-            });
-
             document.addEventListener('keydown', function(event) {
                 if (event.key === 'Escape') {
                     closeReplyModal();
