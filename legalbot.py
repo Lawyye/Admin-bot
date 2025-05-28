@@ -98,17 +98,27 @@ translations = {
         'contacts': '📞 Контакты: +123456789',
         'menu': 'Главное меню',
         'doc_type_error': '⚠️ Неподдерживаемый тип файла',
-        'doc_size_error': '⚠️ Файл слишком большой (максимум 20 МБ)'
+        'doc_size_error': '⚠️ Файл слишком большой (максимум 20 МБ)',
+        'back': '◀️ Назад',
+        'faq': '❓ FAQ',
+        'admin_panel': '👤 Админ-панель',
+        'consultation': '📝 Записаться на консультацию',
+        'change_language': '🌐 Сменить язык'
     },
     'en': {
         'start': '👋 Hello! I am LegalBot. Choose language:\n🇬🇧 English\n🇷🇺 Русский',
         'canceled': '❌ Request canceled',
         'thanks': '✅ Thank you! Request accepted',
         'error_missing_data': '⚠️ Please fill all fields',
-        'contacts': '📞 Contacts: +123456789',
+        'contacts': '📞 Contacts: +88005553535',
         'menu': 'Main menu',
         'doc_type_error': '⚠️ Unsupported file type',
-        'doc_size_error': '⚠️ File too large (max 20 MB)'
+        'doc_size_error': '⚠️ File too large (max 20 MB)',
+        'back': '◀️ Back',
+        'faq': '❓ FAQ',
+        'admin_panel': '👤 Admin Panel',
+        'consultation': '📝 Book Consultation',
+        'change_language': '🌐 Change Language'
     }
 }
 
@@ -128,8 +138,10 @@ def get_menu(lang: str) -> ReplyKeyboardMarkup:
     t = translations[lang]
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="Записаться на консультацию")],
-            [KeyboardButton(text=t['contacts']), KeyboardButton(text="Админ-панель")]
+            [KeyboardButton(text=t['consultation'])],
+            [KeyboardButton(text=t['change_language']), KeyboardButton(text=t['faq'])],
+            [KeyboardButton(text=t['contacts']), KeyboardButton(text=t['admin_panel'])],
+            [KeyboardButton(text=t['back'])]
         ],
         resize_keyboard=True
     )
@@ -141,19 +153,67 @@ async def start_handler(message: types.Message, state: FSMContext):
     await state.update_data(lang='ru')
     await message.answer(translations['ru']['start'], reply_markup=get_menu('ru'))
 
+@dp.message(F.text.endswith('Назад') | F.text.endswith('Back'))
+async def back_handler(message: types.Message, state: FSMContext):
+    lang = await get_lang(state)
+    current_state = await state.get_state()
+    
+    if current_state is None:
+        await message.answer(
+            translations[lang]['menu'],
+            reply_markup=get_menu(lang)
+        )
+    else:
+        await state.clear()
+        await message.answer(
+            translations[lang]['menu'],
+            reply_markup=get_menu(lang)
+        )
+
+@dp.message(F.text.endswith('Сменить язык') | F.text.endswith('Change Language'))
+async def change_language_handler(message: types.Message, state: FSMContext):
+    await message.answer(
+        '🌐 Выберите язык / Choose language:\n🇷🇺 Русский\n🇬🇧 English',
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="🇷🇺 Русский"), KeyboardButton(text="🇬🇧 English")],
+                [KeyboardButton(text="◀️ Назад")]
+            ],
+            resize_keyboard=True
+        )
+    )
+
 @dp.message(F.text.startswith('🇷🇺') | F.text.startswith('🇬🇧'))
 async def lang_handler(message: types.Message, state: FSMContext):
     lang = 'ru' if message.text.startswith('🇷🇺') else 'en'
     await state.update_data(lang=lang)
     await message.answer(translations[lang]['menu'], reply_markup=get_menu(lang))
 
+@dp.message(F.text.endswith('FAQ'))
+async def faq_handler(message: types.Message, state: FSMContext):
+    lang = await get_lang(state)
+    await message.answer(
+        "FAQ содержание...",  # Здесь добавьте ваш FAQ текст
+        reply_markup=get_menu(lang)
+    )
+
+@dp.message(F.text.endswith('Админ-панель') | F.text.endswith('Admin Panel'))
+async def admin_panel_handler(message: types.Message, state: FSMContext):
+    lang = await get_lang(state)
+    admin_url = os.getenv('ADMIN_PANEL_URL', 'https://web-production-bb98.up.railway.app/admin')
+    
+    await message.answer(
+        f"🔐 {translations[lang]['admin_panel']}\n\n{admin_url}",
+        reply_markup=get_menu(lang)
+    )
+
 @dp.message(Command("cancel"))
 async def cancel_handler(message: types.Message, state: FSMContext):
     lang = await get_lang(state)
     await state.clear()
-    await message.answer(translations[lang]['canceled'], reply_markup=ReplyKeyboardRemove())
+    await message.answer(translations[lang]['canceled'], reply_markup=get_menu(lang))
 
-@dp.message(F.text == "Записаться на консультацию")
+@dp.message(F.text.endswith('консультацию') | F.text.endswith('Consultation'))
 async def request_handler(message: types.Message, state: FSMContext):
     await state.set_state(RequestForm.waiting_for_name)
     await message.answer("Введите ваше имя:", reply_markup=ReplyKeyboardRemove())
@@ -239,13 +299,11 @@ async def finish_handler(message: types.Message, state: FSMContext):
     
     await message.answer(translations[lang]['thanks'], reply_markup=get_menu(lang))
     await state.clear()
-  
 
 # ===== FASTAPI НАСТРОЙКА =====
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        # Инициализация базы данных
         await init_db()
         
         webhook_path = '/webhook'
@@ -254,15 +312,12 @@ async def lifespan(app: FastAPI):
             webhook_path
         )
         
-        # Получаем информацию о текущем webhook'е
         current_webhook = await bot.get_webhook_info()
         logger.info(f"Current webhook info: {current_webhook}")
         
-        # Удаляем старый webhook
         await bot.delete_webhook(drop_pending_updates=True)
         logger.info("Old webhook deleted")
         
-        # Устанавливаем новый webhook
         webhook_info = await bot.set_webhook(
             url=webhook_url,
             allowed_updates=['message', 'callback_query', 'inline_query'],
@@ -274,7 +329,6 @@ async def lifespan(app: FastAPI):
         
         yield
         
-        # Удаляем webhook при завершении
         await bot.delete_webhook()
         logger.info("Webhook deleted on shutdown")
     except Exception as e:
@@ -294,91 +348,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ===== ГЛОБАЛЬНЫЙ ОБРАБОТЧИК ОШИБОК =====
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Global exception: {exc}")
-    return JSONResponse(
-        status_code=500,
-        content={
-            "ok": False,
-            "error": str(exc),
-            "path": str(request.url),
-            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-        }
-    )
-
-# ===== ВЕБХУК =====
-@app.post("/webhook")
-async def webhook_handler(request: Request):
-    try:
-        update_data = await request.json()
-        logger.info(f"Received update data: {update_data}")
-        
-        try:
-            update = types.Update.model_validate(update_data)
-        except Exception as e:
-            logger.error(f"Error creating Update object: {e}")
-            update = types.Update(**update_data)
-        
-        logger.info(f"Created update object: {type(update)}")
-        
-        await dp.feed_update(bot, update)
-        return {"ok": True}
-    except Exception as e:
-        logger.error(f"Webhook error: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "ok": False, 
-                "error": str(e),
-                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-            }
-        )
-
-@app.get("/webhook")
-async def webhook_get():
-    """Handle GET requests to webhook endpoint with a more informative message"""
-    return JSONResponse(
-        status_code=405,
-        content={
-            "ok": False,
-            "error": "Method Not Allowed",
-            "detail": "This webhook endpoint only accepts POST requests from Telegram servers. GET requests are not allowed.",
-            "documentation": "https://core.telegram.org/bots/api#setwebhook",
-            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-        }
-    )
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint that returns bot status"""
-    try:
-        bot_info = await bot.get_me()
-        webhook_info = await bot.get_webhook_info()
-        return {
-            "status": "ok",
-            "bot": {
-                "id": bot_info.id,
-                "username": bot_info.username,
-                "webhook_url": webhook_info.url,
-                "pending_updates": webhook_info.pending_update_count
-            },
-            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-        }
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "error": str(e),
-                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-            }
-        )
-
-# ===== АДМИН-ПАНЕЛЬ =====
+# ===== MIDDLEWARE =====
 app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET', 'secret'))
 
+# ===== ROUTES =====
 @app.get("/")
 async def root():
     return RedirectResponse("/admin/login", status_code=302)
@@ -412,7 +385,71 @@ async def admin_panel(request: Request):
         return RedirectResponse("/admin/login")
     return templates.TemplateResponse("admin.html", {"request": request})
 
-# ===== ЗАПУСК =====
+@app.post("/webhook")
+async def webhook_handler(request: Request):
+    try:
+        update_data = await request.json()
+        logger.info(f"Received update data: {update_data}")
+        
+        try:
+            update = types.Update.model_validate(update_data)
+        except Exception as e:
+            logger.error(f"Error creating Update object: {e}")
+            update = types.Update(**update_data)
+        
+        logger.info(f"Created update object: {type(update)}")
+        
+        await dp.feed_update(bot, update)
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"Webhook error: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False, 
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            }
+        )
+
+@app.get("/webhook")
+async def webhook_get():
+    return JSONResponse(
+        status_code=405,
+        content={
+            "ok": False,
+            "error": "Method Not Allowed",
+            "detail": "This webhook endpoint only accepts POST requests from Telegram servers.",
+            "documentation": "https://core.telegram.org/bots/api#setwebhook",
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        }
+    )
+
+@app.get("/health")
+async def health_check():
+    try:
+        bot_info = await bot.get_me()
+        webhook_info = await bot.get_webhook_info()
+        return {
+            "status": "ok",
+            "bot": {
+                "id": bot_info.id,
+                "username": bot_info.username,
+                "webhook_url": webhook_info.url,
+                "pending_updates": webhook_info.pending_update_count
+            },
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            }
+        )
+
 if __name__ == "__main__":
     asyncio.run(init_db())
     uvicorn.run(
@@ -420,4 +457,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8080,
         reload=True
-        )
+    )
