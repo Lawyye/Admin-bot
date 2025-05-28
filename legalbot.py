@@ -378,12 +378,49 @@ async def admin_auth(
         {"request": request, "error": "Неверные данные"},
         status_code=401
     )
+@app.post("/admin/update")
+async def update_request(
+    request: Request,
+    request_id: int = Form(...),
+    status: str = Form(...),
+    reply: str = Form("")
+):
+    if not request.session.get("auth"):
+        return RedirectResponse("/admin/login", status_code=302)
+
+    async with aiosqlite.connect("bot.db") as db:
+        await db.execute("UPDATE requests SET status = ? WHERE id = ?", (status, request_id))
+        await db.commit()
+
+        if reply:
+            cursor = await db.execute("SELECT user_id FROM requests WHERE id = ?", (request_id,))
+            row = await cursor.fetchone()
+            if row:
+                await bot.send_message(row["user_id"], f"📩 Ответ администратора:\n\n{reply}")
+
+    return RedirectResponse("/admin", status_code=303)
+    
 
 @app.get("/admin")
 async def admin_panel(request: Request):
     if not request.session.get("auth"):
         return RedirectResponse("/admin/login")
-    return templates.TemplateResponse("admin.html", {"request": request})
+
+    async with aiosqlite.connect("bot.db") as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM requests ORDER BY created_at DESC")
+        requests = await cursor.fetchall()
+        enriched = []
+        for row in requests:
+            cur_docs = await db.execute("SELECT * FROM documents WHERE request_id = ?", (row["id"],))
+            documents = await cur_docs.fetchall()
+            enriched.append({**dict(row), "documents": [dict(d) for d in documents]})
+
+    return templates.TemplateResponse("admin.html", {
+        "request": request,
+        "requests": enriched,
+        "bot_token": os.getenv("BOT_TOKEN")
+    })
 
 @app.post("/webhook")
 async def webhook_handler(request: Request):
