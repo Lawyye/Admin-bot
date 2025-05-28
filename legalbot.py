@@ -10,6 +10,7 @@ from urllib.parse import quote
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
+from aiogram.filters.state import StateFilter  # Добавлен импорт StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
@@ -209,7 +210,7 @@ def get_menu_kb(user_id: int, lang: str = 'ru') -> ReplyKeyboardMarkup:
         [KeyboardButton(text=t['consult_button'])],
         [KeyboardButton(text=t['faq_button'])],
         [KeyboardButton(text=t['contacts_button'])],
-        [KeyboardButton(text=t['choose_language'])]  # Добавлена кнопка выбора языка
+        [KeyboardButton(text=t['choose_language'])]
     ]
     if user_id in ADMINS:
         buttons.append([KeyboardButton(text=t['admin_panel_button'])])
@@ -414,7 +415,7 @@ async def process_attach_docs(message: types.Message, state: FSMContext):
             reply_markup=get_back_kb(lang)
         )
 
-@dp.message(Command("done"), state=RequestForm.attach_docs)
+@dp.message(Command("done"), StateFilter(RequestForm.attach_docs))
 async def done_command(message: types.Message, state: FSMContext):
     await finish_request(message, state)
 
