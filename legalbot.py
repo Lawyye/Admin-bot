@@ -358,13 +358,13 @@ async def admin_login(request: Request):
 
 @app.post("/admin/login")
 async def admin_auth(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
-    request: Request
 ):
     valid_users = {
         os.getenv("ADMIN_USER1", "nurbol"): os.getenv("ADMIN_PASS1", "marzhan2508"),
-        os.getenv("ADMIN_USER2", "vlad"):     os.getenv("ADMIN_PASS2", "archiboss20052024"),
+        os.getenv("ADMIN_USER2", "vlad"): os.getenv("ADMIN_PASS2", "archiboss20052024"),
     }
     if username in valid_users and password == valid_users[username]:
         request.session["auth"] = True
@@ -374,7 +374,6 @@ async def admin_auth(
         {"request": request, "error": "Неверные данные"},
         status_code=401
     )
-
 @app.get("/admin/api/requests")
 async def api_requests(request: Request):
     if not request.session.get("auth"):
