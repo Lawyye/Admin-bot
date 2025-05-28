@@ -412,7 +412,11 @@ async def update_request(
 
     try:
         async with aiosqlite.connect("bot.db") as db:
-            await db.execute("UPDATE requests SET status = ? WHERE id = ?", (status, request_id))
+            db.row_factory = aiosqlite.Row  # ← добавь это!
+            await db.execute(
+                "UPDATE requests SET status = ? WHERE id = ?",
+                (status, request_id)
+            )
             await db.commit()
 
             if reply:
@@ -421,11 +425,14 @@ async def update_request(
 
                 if row and row["user_id"]:
                     try:
-                        await bot.send_message(row["user_id"], f"📩 Ответ администратора:\n\n{reply}")
+                        await bot.send_message(
+                            row["user_id"],
+                            f"📩 Ответ администратора:\n\n{reply}"
+                        )
                     except Exception as send_err:
-                        logger.error(f"❌ Ошибка при отправке сообщения пользователю: {send_err}")
+                        logger.error(f"Ошибка при отправке сообщения: {send_err}")
                 else:
-                    logger.warning(f"⚠️ Не найден user_id для request_id {request_id}")
+                    logger.warning(f"⚠️ Не найден user_id для заявки {request_id}")
 
         return RedirectResponse("/admin", status_code=303)
 
