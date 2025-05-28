@@ -250,9 +250,15 @@ async def message_handler(message: types.Message, state: FSMContext):
     await state.set_state(RequestForm.attach_docs)
     await message.answer("Прикрепите документы (если есть) и нажмите /done")
 
-@dp.message(F.document, RequestForm.attach_docs)
+@dp.message(RequestForm.attach_docs & F.document)
 async def doc_handler(message: types.Message, state: FSMContext):
     lang = await get_lang(state)
+   
+    logger.info(f"[📎 ДОКУМЕНТ ПОЛУЧЕН] file_id: {message.document.file_id}")
+    logger.info(f"Название: {message.document.file_name}")
+    logger.info(f"Тип: {message.document.mime_type}")
+    logger.info(f"Размер: {message.document.file_size}")
+   
     if message.document.mime_type not in ALLOWED_DOCUMENT_TYPES:
         await message.answer(translations[lang]['doc_type_error'])
         return
