@@ -353,6 +353,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/admin-react", StaticFiles(directory="static/admin-react"), name="admin-react")
 
 # ===== CORS =====
 app.add_middleware(
@@ -415,6 +416,23 @@ async def admin_panel(request: Request):
         "bot_token": os.getenv("BOT_TOKEN")
     })
 
+@app.get("/admin/api/requests")
+async def api_requests(request: Request):
+    if not request.session.get("auth"):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    async with aiosqlite.connect("bot.db") as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM requests ORDER BY created_at DESC")
+        requests = await cursor.fetchall()
+
+        result = []
+        for row in requests:
+            cur_docs = await db.execute("SELECT * FROM documents WHERE request_id = ?", (row["id"],))
+            docs = await cur_docs.fetchall()
+            result.append({**dict(row), "documents": [dict(d) for d in docs]})
+
+    return result
 @app.post("/admin/update")
 async def update_request(
     request: Request,
