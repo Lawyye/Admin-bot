@@ -136,7 +136,7 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Конфигурация вебхука
-WEBHOOK_PATH = f"/webhook/{API_TOKEN.replace(':', '%3A')}"  # Экранируем :
+WEBHOOK_PATH = f"/webhook/{quote(API_TOKEN)}"  # Экранируем :
 WEBHOOK_URL = f"{APP_URL}{WEBHOOK_PATH}"
 # Translation setup
 translations = {
@@ -398,7 +398,6 @@ async def handle_webhook(update: dict):
     except Exception as e:
         logging.error(f"Webhook error: {e}")
         return {"status": "error", "details": str(e)}
-
 
 
 @app.get("/admin/api/requests")
