@@ -142,14 +142,7 @@ async def get_lang(state: FSMContext) -> str:
 def get_menu(lang: str) -> ReplyKeyboardMarkup:
     t = translations[lang]
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=t['consultation'])],
-            [KeyboardButton(text=t['change_language']), KeyboardButton(text=t['faq'])],
-            [KeyboardButton(text=t['contacts']), KeyboardButton(text=t['admin_panel'])],
-            [KeyboardButton(text=t['back'])]
-        ],
-        resize_keyboard=True
-    )
+)
 
 # ===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
 @dp.message(Command("start"))
