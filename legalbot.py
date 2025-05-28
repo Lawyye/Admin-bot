@@ -420,32 +420,12 @@ async def done_command(message: types.Message, state: FSMContext):
     await finish_request(message, state)
 
 async def finish_request(message: types.Message, state: FSMContext):
-
-
-@dp.message(F.text.in_(["Часто задаваемые вопросы", "FAQ"]))
-async def faq(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
     t = translations[lang]
     
-    await message.answer(
-        t['faq_not_added'],
-        reply_markup=get_menu_kb(user_id, lang)
-    )
-
-@dp.message(F.text.in_(["Контакты", "Contacts"]))
-async def contacts(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    lang = await get_lang(state, user_id)
-    t = translations[lang]
-    
-    async def finish_request(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    lang = await get_lang(state, user_id)
-    t = translations[lang]
-
     data = await state.get_data()
-
+    
     # Save to database
     with conn:
         logger.info(f"Saving request for user {user_id}: {data}")
@@ -463,7 +443,7 @@ async def contacts(message: types.Message, state: FSMContext):
         )
         request_id = cursor.lastrowid
         logger.info(f"Request saved with ID: {request_id}")
-
+        
         # Save documents if any
         documents = data.get('documents', [])
         for doc in documents:
@@ -486,7 +466,7 @@ async def contacts(message: types.Message, state: FSMContext):
 """
         try:
             await bot.send_message(ADMIN_CHAT_ID, admin_text)
-
+            
             # Send documents to admin
             for doc in documents:
                 await bot.send_document(
@@ -496,12 +476,24 @@ async def contacts(message: types.Message, state: FSMContext):
                 )
         except Exception as e:
             logger.error(f"Error sending to admin: {e}")
-
+    
     await state.clear()
     await message.answer(
         t['thanks'],
         reply_markup=get_menu_kb(user_id, lang)
     )
+
+@dp.message(F.text.in_(["Часто задаваемые вопросы", "FAQ"]))
+async def faq(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    lang = await get_lang(state, user_id)
+    t = translations[lang]
+    
+    await message.answer(
+        t['faq_not_added'],
+        reply_markup=get_menu_kb(user_id, lang)
+    )
+
 
 @dp.message(F.text.in_(["Админ-панель", "Admin Panel"]))
 async def admin_panel(message: types.Message, state: FSMContext):
