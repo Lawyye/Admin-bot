@@ -347,13 +347,19 @@ app.add_middleware(
 app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET', 'secret'))
 
 # ===== ROUTES =====
+
 @app.get("/")
 async def root():
-    return RedirectResponse("/admin-react", status_code=302)
+    return RedirectResponse("/admin-react/", status_code=302)
 
 @app.get("/admin/login")
 async def admin_login(request: Request):
     return templates.TemplateResponse("admin_login.html", {"request": request})
+
+@app.get("/admin/logout")
+async def admin_logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/admin/login")
 
 @app.post("/admin/login")
 async def admin_auth(
