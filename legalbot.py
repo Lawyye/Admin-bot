@@ -363,9 +363,9 @@ app.add_middleware(
 async def webhook(request: Request):
     try:
         update_data = await request.json()
-        # Используем прямой импорт Update
-        telegram_update = Update(**update_data)
-        await dp.feed_update(bot=bot, update=telegram_update)
+        logger.info(f"Received update: {update_data}")
+        await dp.feed_raw_update(bot=bot, update=update_data)
+        logger.info("Update processed successfully")
         return {"ok": True}
     except Exception as e:
         logger.error(f"Webhook error: {e}")
