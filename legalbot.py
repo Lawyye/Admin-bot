@@ -11,7 +11,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from fastapi import FastAPI, Request, Form
+from aiogram.client.default import DefaultBotProperties
+from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -39,8 +40,11 @@ ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
 if not API_TOKEN:
     raise ValueError("BOT_TOKEN не установлен в .env")
 
-# Создаем бота с parse_mode по умолчанию
-bot = Bot(token=API_TOKEN, parse_mode="HTML")
+# Создаем бота с новым способом установки parse_mode
+bot = Bot(
+    token=API_TOKEN,
+    default=DefaultBotProperties(parse_mode="HTML")
+)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
@@ -201,22 +205,29 @@ async def lifespan(app: FastAPI):
             webhook_path
         )
         
+        # Получаем информацию о текущем webhook'е
+        current_webhook = await bot.get_webhook_info()
+        logger.info(f"Current webhook info: {current_webhook}")
+        
         # Удаляем старый webhook
         await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Old webhook deleted")
         
         # Устанавливаем новый webhook
         webhook_info = await bot.set_webhook(
             url=webhook_url,
-            allowed_updates=['message', 'callback_query']
+            allowed_updates=['message', 'callback_query', 'inline_query'],
+            drop_pending_updates=True
         )
         
-        logger.info(f"Webhook установлен: {webhook_url}")
-        logger.info(f"Webhook info: {webhook_info}")
+        logger.info(f"New webhook set: {webhook_url}")
+        logger.info(f"Webhook setup result: {webhook_info}")
         
         yield
         
         # Удаляем webhook при завершении
         await bot.delete_webhook()
+        logger.info("Webhook deleted on shutdown")
     except Exception as e:
         logger.error(f"Lifespan error: {e}")
         raise
@@ -233,6 +244,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ===== ГЛОБАЛЬНЫЙ ОБРАБОТЧИК ОШИБОК =====
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "ok": False,
+            "error": str(exc),
+            "path": str(request.url)
+        }
+    )
 
 # ===== ВЕБХУК =====
 @app.post("/webhook")
@@ -261,6 +285,13 @@ async def webhook_handler(request: Request):
                 "update_data": update_data if 'update_data' in locals() else None
             }
         )
+
+@app.get("/webhook")
+async def webhook_get():
+    raise HTTPException(
+        status_code=405,
+        detail="GET method is not allowed. Only POST requests are accepted."
+    )
 
 # ===== АДМИН-ПАНЕЛЬ =====
 app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET', 'secret'))
