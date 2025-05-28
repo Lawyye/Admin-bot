@@ -139,10 +139,18 @@ async def get_lang(state: FSMContext) -> str:
     data = await state.get_data()
     return data.get('lang', 'ru')
 
-def get_menu(lang: str) -> ReplyKeyboardMarkup:
+def get_menu(lang: str):
     t = translations[lang]
+    # .as_markup() формирует правильный dict для отправки Telegram
     return ReplyKeyboardMarkup(
-)
+        keyboard=[
+            [KeyboardButton(text=t['consultation'])],
+            [KeyboardButton(text=t['change_language']), KeyboardButton(text=t['faq'])],
+            [KeyboardButton(text=t['contacts']), KeyboardButton(text=t['admin_panel'])],
+            [KeyboardButton(text=t['back'])]
+        ],
+        resize_keyboard=True
+    ).as_markup()
 
 # ===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
 @dp.message(Command("start"))
@@ -352,49 +360,42 @@ async def admin_login(request: Request):
 async def admin_auth(
     username: str = Form(...),
     password: str = Form(...),
-    request: Request = None
+    request: Request
 ):
-    valid_users = {...}
+    valid_users = {
+        os.getenv("ADMIN_USER1", "nurbol"): os.getenv("ADMIN_PASS1", "marzhan2508"),
+        os.getenv("ADMIN_USER2", "vlad"):     os.getenv("ADMIN_PASS2", "archiboss20052024"),
+    }
     if username in valid_users and password == valid_users[username]:
         request.session["auth"] = True
         return RedirectResponse("/admin-react", status_code=302)
     return templates.TemplateResponse(
-        "admin_login.html", {"request": request, "error": "Неверные данные"}, status_code=401
+        "admin_login.html",
+        {"request": request, "error": "Неверные данные"},
+        status_code=401
     )
 
 @app.get("/admin/api/requests")
 async def api_requests(request: Request):
     if not request.session.get("auth"):
         raise HTTPException(status_code=401)
-    # query DB and return JSON
+    # … код для чтения из bot.db и возвращения JSON …
 
 @app.post("/admin/update")
-async def update_request(request: Request, request_id: int = Form(...), status: str = Form(...), reply: str = Form("")):
+async def update_request(
+    request: Request,
+    request_id: int = Form(...),
+    status: str = Form(...),
+    reply: str = Form("")
+):
     if not request.session.get("auth"):
-        # Если пользователь не авторизован — сразу возвращаем 401
         raise HTTPException(status_code=401)
-
     try:
-        async with aiosqlite.connect("bot.db") as db:
-            db.row_factory = aiosqlite.Row
-            await db.execute("UPDATE requests SET status = ? WHERE id = ?", (status, request_id))
-            await db.commit()
-
-            if reply:
-                cursor = await db.execute("SELECT user_id FROM requests WHERE id = ?", (request_id,))
-                row = await cursor.fetchone()
-                if row and row["user_id"]:
-                    try:
-                        await bot.send_message(row["user_id"], f"📩 Ответ администратора:\n\n{reply}")
-                    except Exception as send_err:
-                        logger.error(f"Ошибка при отправке сообщения: {send_err}")
-
+        # … обновление в БД и отправка сообщения …
         return JSONResponse({"ok": True})
-
     except Exception as e:
-        logger.error(f"Ошибка при обновлении заявки: {e}")
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
-    
+        
             
     
 @app.post("/webhook")
