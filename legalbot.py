@@ -2,21 +2,19 @@ import logging
 import os
 from datetime import datetime, timezone
 import sqlite3
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.utils.executor import start_webhook
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command, Text
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from aiogram.utils import executor
+from aiogram.webhook import start_webhook
 import redis.asyncio as redis
-from fastapi import FastAPI, Request, Depends, Form, HTTPException, status
+from fastapi import FastAPI, Request, Form, HTTPException, status
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
-import uvicorn
-from typing import Optional
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -31,7 +29,7 @@ ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')  # Установите в перем
 
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
+dp = Dispatcher(bot=bot, storage=storage)
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -77,7 +75,7 @@ translations = {
         'select_lang': 'Выберите язык / Choose language',
         'canceled': '❌ Запрос отменен. Вы вернулись в главное меню.',
         'thanks': '✅ Спасибо! Ваша заявка принята. Мы свяжемся с вами в ближайшее время.',
-        'error_missing_data': 'Ошибка: не все данные заполены. Пожалуйста, начните заново.',
+        'error_missing_data': 'Ошибка: не все данные заполнены. Пожалуйста, начните заново.',
         'faq_not_added': '⚠️ Функция "Часто задаваемые вопросы" пока не добавлена. Скоро будет доступна!',
         'contacts': '📞 Наши контакты:\nТелефон: +123456789\nEmail: support@legalbot.com'
     },
@@ -101,12 +99,12 @@ class RequestForm(StatesGroup):
 
 # Получение языка
 async def get_lang(state: FSMContext, user_id: int) -> str:
-    lang = await state.get_data()
-    if 'lang' not in lang:
+    data = await state.get_data()
+    if 'lang' not in data:
         lang = 'ru'  # Значение по умолчанию
         await state.update_data(lang=lang)
     else:
-        lang = lang['lang']
+        lang = data['lang']
     return lang
 
 # Клавиатуры
@@ -116,10 +114,10 @@ def get_menu_kb(user_id: int, lang: str) -> ReplyKeyboardMarkup:
         [KeyboardButton(t['faq_not_added']), KeyboardButton("Контакты")],
         [KeyboardButton("Записаться на консультацию"), KeyboardButton("Админ-панель")]
     ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 # Обработчики бота
-@dp.message(commands=['start'])
+@dp.message(Command("start"))
 async def start_command(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = 'ru'  # Значение по умолчанию
@@ -130,7 +128,7 @@ async def start_command(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-@dp.message(F.text.in_(["🇷🇺 Русский", "🇬🇧 English"]))
+@dp.message(Text(text=["🇷🇺 Русский", "🇬🇧 English"]))
 async def set_lang(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = 'ru' if message.text == "🇷🇺 Русский" else 'en'
@@ -141,7 +139,7 @@ async def set_lang(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-@dp.message(F.text == "Записаться на консультацию")
+@dp.message(Text(text="Записаться на консультацию"))
 async def start_request(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -150,10 +148,10 @@ async def start_request(message: types.Message, state: FSMContext):
     await state.set_state(RequestForm.waiting_for_name)
     await message.answer(
         "Введите ваше имя / Enter your name",
-        reply_markup=ReplyKeyboardMarkup([[KeyboardButton("⬅️ Назад")]], resize_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton("⬅️ Назад")]], resize_keyboard=True)
     )
 
-@dp.message(StateFilter(RequestForm.waiting_for_name))
+@dp.message(RequestForm.waiting_for_name)
 async def process_name(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -163,10 +161,10 @@ async def process_name(message: types.Message, state: FSMContext):
     await state.set_state(RequestForm.waiting_for_phone)
     await message.answer(
         "Введите ваш телефон / Enter your phone",
-        reply_markup=ReplyKeyboardMarkup([[KeyboardButton("⬅️ Назад")]], resize_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton("⬅️ Назад")]], resize_keyboard=True)
     )
 
-@dp.message(StateFilter(RequestForm.waiting_for_phone))
+@dp.message(RequestForm.waiting_for_phone)
 async def process_phone(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -176,10 +174,10 @@ async def process_phone(message: types.Message, state: FSMContext):
     await state.set_state(RequestForm.waiting_for_message)
     await message.answer(
         "Введите сообщение / Enter your message",
-        reply_markup=ReplyKeyboardMarkup([[KeyboardButton("⬅️ Назад")]], resize_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton("⬅️ Назад")]], resize_keyboard=True)
     )
 
-@dp.message(StateFilter(RequestForm.waiting_for_message))
+@dp.message(RequestForm.waiting_for_message)
 async def process_message(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -189,10 +187,10 @@ async def process_message(message: types.Message, state: FSMContext):
     await state.set_state(RequestForm.attach_docs)
     await message.answer(
         "Прикрепите документы (если есть) и нажмите /done для завершения / Attach documents (if any) and press /done to finish",
-        reply_markup=ReplyKeyboardMarkup([[KeyboardButton("⬅️ Назад"), KeyboardButton("/done")]], resize_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton("⬅️ Назад"), KeyboardButton("/done")]], resize_keyboard=True)
     )
 
-@dp.message(StateFilter(RequestForm.attach_docs), content_types=types.ContentType.DOCUMENT)
+@dp.message(RequestForm.attach_docs, content_types=types.ContentType.DOCUMENT)
 async def process_document(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -208,15 +206,15 @@ async def process_document(message: types.Message, state: FSMContext):
     await state.update_data(documents=documents)
     await message.answer(
         "Документ добавлен. Прикрепите еще (если нужно) или нажмите /done для завершения / Document added. Attach more (if needed) or press /done to finish",
-        reply_markup=ReplyKeyboardMarkup([[KeyboardButton("⬅️ Назад"), KeyboardButton("/done")]], resize_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton("⬅️ Назад"), KeyboardButton("/done")]], resize_keyboard=True)
     )
 
-@dp.message(Command("done"), StateFilter(RequestForm.attach_docs))
+@dp.message(Command("done"), RequestForm.attach_docs)
 async def done_command(message: types.Message, state: FSMContext):
     logger.info(f"Processing /done command for user {message.from_user.id}")
     await finish_request(message, state)
 
-@dp.message(F.text == "⬅️ Назад", StateFilter(RequestForm))
+@dp.message(Text(text="⬅️ Назад"), RequestForm)
 async def cancel_request(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -302,7 +300,7 @@ async def finish_request(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-@dp.message(F.text.in_(["Часто задаваемые вопросы", "FAQ"]))
+@dp.message(Text(text=["Часто задаваемые вопросы", "FAQ"]))
 async def faq(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -313,7 +311,7 @@ async def faq(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-@dp.message(F.text == "Контакты")
+@dp.message(Text(text="Контакты"))
 async def contacts(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
