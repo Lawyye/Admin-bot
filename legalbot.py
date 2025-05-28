@@ -2,6 +2,7 @@ import logging
 import os
 from datetime import datetime, timezone
 import sqlite3
+from fastapi import UploadFile, File
 from aiogram.filters import Command
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -366,10 +367,14 @@ WEBHOOK_PATH = '/webhook'
 WEBHOOK_URL = f"{os.getenv('WEBHOOK_HOST', 'https://web-production-bb98.up.railway.app')}{WEBHOOK_PATH}"
 
 @app.post(WEBHOOK_PATH)
-async def webhook(request: Request):
-    update = types.Update(**await request.json())
-    await dp.feed_update(bot=bot, update=update)
-    return {"ok": True}
+async def webhook(update: dict):
+    try:
+        telegram_update = types.Update(**update)
+        await dp.feed_update(bot=bot, update=telegram_update)
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return {"ok": False}
 
 # Запуск сервера
 async def on_startup():
@@ -387,13 +392,13 @@ async def on_shutdown():
     except Exception as e:
         logger.error(f"Failed to delete webhook: {e}")
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     await on_startup()
-
-@app.on_event("shutdown")
-async def shutdown_event():
+    yield
     await on_shutdown()
+
+app = FastAPI(lifespan=lifespan)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
