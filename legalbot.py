@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
@@ -208,7 +208,8 @@ def get_menu_kb(user_id: int, lang: str = 'ru') -> ReplyKeyboardMarkup:
     buttons = [
         [KeyboardButton(text=t['consult_button'])],
         [KeyboardButton(text=t['faq_button'])],
-        [KeyboardButton(text=t['contacts_button'])]
+        [KeyboardButton(text=t['contacts_button'])],
+        [KeyboardButton(text=t['choose_language'])]  # Добавлена кнопка выбора языка
     ]
     if user_id in ADMINS:
         buttons.append([KeyboardButton(text=t['admin_panel_button'])])
@@ -391,10 +392,6 @@ async def process_attach_docs(message: types.Message, state: FSMContext):
         )
         return
     
-    if message.text == "/done":
-        await finish_request(message, state)
-        return
-    
     if message.document:
         data = await state.get_data()
         documents = data.get('documents', [])
@@ -416,6 +413,10 @@ async def process_attach_docs(message: types.Message, state: FSMContext):
             t['attach_added'].format(message.document.file_name),
             reply_markup=get_back_kb(lang)
         )
+
+@dp.message(Command("done"), state=RequestForm.attach_docs)
+async def done_command(message: types.Message, state: FSMContext):
+    await finish_request(message, state)
 
 async def finish_request(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
@@ -518,11 +519,75 @@ async def admin_panel(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, 'ru')
     )
 
-# Initialize FastAPI
+@dp.message(F.text.in_([translations['ru']['lang_ru'], translations['en']['lang_en']]))
+async def set_language(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    lang = 'ru' if message.text == translations['ru']['lang_ru'] else 'en'
+    save_user_language(user_id, lang)
+    await state.update_data(lang=lang)
+    await message.answer(
+        translations[lang]['menu_caption'],
+        reply_markup=get_menu_kb(user_id, lang)
+    )
 
+# Initialize FastAPI
 async def lifespan(app: FastAPI):
     # Startup logic
     logger.info("🚀 Starting LegalBot...")
+    webhook_set = False
+    try:
+        # Delete existing webhook
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("🗑 Old webhook deleted")
+        
+        # Set new webhook
+        await bot.set_webhook(
+            url=WEBHOOK_URL,
+            drop_pending_updates=True,
+            allowed_updates=dp.resolve_used_update_types()
+        )
+        webhook_set = True
+        logger.info(f"✅ Webhook successfully set to: {WEBHOOK_URL}")
+        
+        # Test webhook
+        webhook_info = await bot.get_webhook_info()
+        logger.info(f"📡 Webhook info: {webhook_info}")
+        
+    except Exception as e:
+        logger.critical(f"❌ Failed to set webhook: {e}")
+        raise
+    
+    try:
+        yield
+        
+    finally:
+        # Shutdown logic
+        logger.info("🛑 Shutting down LegalBot...")
+        
+        try:
+            if webhook_set:
+                await bot.delete_webhook(drop_pending_updates=True)
+                logger.info("🗑 Webhook deleted")
+        except Exception as e:
+            logger.error(f"⚠️ Error deleting webhook: {e}")
+
+        try:
+            await bot.session.close()
+            logger.info("🤖 Bot session closed")
+        except Exception as e:
+            logger.error(f"⚠️ Error closing bot session: {e}")
+
+        try:
+            await storage.close()
+            logger.info("🗄 Redis storage closed")
+        except Exception as e:
+            logger.error(f"⚠️ Error closing storage: {e}")
+
+        try:
+            conn.close()
+            logger.info("🔒 Database connection closed")
+        except Exception as e:
+            logger.error(f"⚠️ Error closing database: {e}")
 
 app = FastAPI(lifespan=asynccontextmanager(lifespan))
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
@@ -617,9 +682,11 @@ async def admin_login(request: Request):
        (username == ADMIN_LOGIN2 and password == ADMIN_PASSWORD2):
         request.session["admin"] = username
         return RedirectResponse("/admin", status_code=302)
-    
-    return templates.TemplateResponse("admin_login.html", 
-        {"request": request, "error": "Invalid credentials"})
+    else:
+        return templates.TemplateResponse(
+            "admin_login.html",
+            {"request": request, "error": "Неверные логин или пароль"}
+        )
 
 @app.post("/admin/logout")
 async def admin_logout(request: Request):
@@ -636,67 +703,6 @@ async def admin_panel_page(request: Request):
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
-
-@app.get("/")
-async def root():
-    logging.info("✅ LegalBot is running")
-yield
-# Lifespan management
-    
-    webhook_set = False
-    try:
-        # Delete existing webhook
-        await bot.delete_webhook(drop_pending_updates=True)
-        logger.info("🗑 Old webhook deleted")
-        
-        # Set new webhook
-        await bot.set_webhook(
-            url=WEBHOOK_URL,
-            drop_pending_updates=True,
-            allowed_updates=dp.resolve_used_update_types()
-        )
-        webhook_set = True
-        logger.info(f"✅ Webhook successfully set to: {WEBHOOK_URL}")
-        
-        # Test webhook
-        webhook_info = await bot.get_webhook_info()
-        logger.info(f"📡 Webhook info: {webhook_info}")
-        
-    except Exception as e:
-        logger.critical(f"❌ Failed to set webhook: {e}")
-        raise
-    
-    try:
-        yield
-        
-    finally:
-        # Shutdown logic
-        logger.info("🛑 Shutting down LegalBot...")
-        
-        try:
-            if webhook_set:
-                await bot.delete_webhook(drop_pending_updates=True)
-                logger.info("🗑 Webhook deleted")
-        except Exception as e:
-            logger.error(f"⚠️ Error deleting webhook: {e}")
-
-        try:
-            await bot.session.close()
-            logger.info("🤖 Bot session closed")
-        except Exception as e:
-            logger.error(f"⚠️ Error closing bot session: {e}")
-
-        try:
-            await storage.close()
-            logger.info("🗄 Redis storage closed")
-        except Exception as e:
-            logger.error(f"⚠️ Error closing storage: {e}")
-
-        try:
-            conn.close()
-            logger.info("🔒 Database connection closed")
-        except Exception as e:
-            logger.error(f"⚠️ Error closing database: {e}")
 
 # Webhook handler
 @app.post(WEBHOOK_PATH)
