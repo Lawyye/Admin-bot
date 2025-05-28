@@ -604,7 +604,9 @@ templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Webhook configuration
+logger.info(f"Loaded API_TOKEN: {API_TOKEN}")
 WEBHOOK_PATH = f"/webhook/{API_TOKEN.replace(':', '%3A')}"
+logger.info(f"Webhook path: {WEBHOOK_PATH}")
 WEBHOOK_URL = f"{APP_URL}{WEBHOOK_PATH}"
 
 # Admin API routes
@@ -714,9 +716,11 @@ async def health_check():
 # Webhook handler
 @app.post(WEBHOOK_PATH)
 async def handle_webhook(update: dict):
+    logger.info(f"Webhook triggered with update: {update}")
     try:
         telegram_update = types.Update(**update)
         await dp.feed_update(bot=bot, update=telegram_update)
+        logger.info("Update processed successfully")
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"❌ Webhook processing error: {e}")
