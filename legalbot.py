@@ -1,238 +1,245 @@
-import logging 
-import os 
-import asyncio 
-from datetime import datetime, timezone 
-import aiosqlite 
-from contextlib import asynccontextmanager 
-from urllib.parse import urljoin 
+import logging
+import os
+import asyncio
+from datetime import datetime, timezone
+import aiosqlite
+from contextlib import asynccontextmanager
+from urllib.parse import urljoin
 from typing import List, Optional
 
-from aiogram import Bot, Dispatcher, types, F 
-from aiogram.filters import Command, StateFilter 
-from aiogram.fsm.context import FSMContext 
-from aiogram.fsm.state import State, StatesGroup 
-from aiogram.fsm.storage.memory import MemoryStorage 
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove 
-from aiogram.client.default import DefaultBotProperties 
-from fastapi import FastAPI, Request, Form, HTTPException 
-from fastapi.responses import RedirectResponse, JSONResponse 
-from fastapi.templating import Jinja2Templates 
-from fastapi.staticfiles import StaticFiles 
-from starlette.middleware.sessions import SessionMiddleware 
-from dotenv import load_dotenv 
-from fastapi.middleware.cors import CORSMiddleware 
-import redis.asyncio as redis 
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command, StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.client.default import DefaultBotProperties
+from fastapi import FastAPI, Request, Form, HTTPException
+from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
+from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
+import redis.asyncio as redis
 import uvicorn
 
-#===== НАСТРОЙКА ЛОГИРОВАНИЯ =====
-
-logging.basicConfig(level=logging.INFO) 
-logger = logging.getLogger(name) 
+# ===== НАСТРОЙКА ЛОГИРОВАНИЯ =====
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 load_dotenv()
 
-#Логирование версий библиотек
+# Логирование версий библиотек
+import aiogram
+import fastapi
+logger.info(f"aiogram version: {aiogram.__version__}")
+logger.info(f"fastapi version: {fastapi.__version__}")
 
-import aiogram 
-import fastapi 
-logger.info(f"aiogram version: {aiogram.version}") 
-logger.info(f"fastapi version: {fastapi.version}")
-
-#===== КОНСТАНТЫ =====
-
-MAX_DOCUMENT_SIZE = 20 * 1024 * 1024  # 20 MB ALLOWED_DOCUMENT_TYPES = {'application/pdf', 'image/jpeg', 'image/png', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
-
-#===== ИНИЦИАЛИЗАЦИЯ БОТА =====
-
-API_TOKEN = os.getenv('BOT_TOKEN') 
-ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID') 
-ALLOWED_ORIGINS = [origin for origin in os.getenv('ALLOWED_ORIGINS', '*').split(',') if origin]
-
-if not API_TOKEN: 
-  raise ValueError("BOT_TOKEN не установлен в .env")
-
-bot = Bot( 
-  token=API_TOKEN, 
-  default=DefaultBotProperties(parse_mode="HTML") 
-) 
-storage = MemoryStorage() 
-dp = Dispatcher(storage=storage)
-
-#===== БАЗА ДАННЫХ =====
-async def init_db(): 
-    async with aiosqlite.connect('bot.db') as db: 
-        await db.execute(""" 
-            CREATE TABLE IF NOT EXISTS requests ( 
-                id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                user_id INTEGER, 
-                name TEXT, 
-                phone TEXT, 
-                message TEXT, 
-                created_at TEXT, 
-                status TEXT DEFAULT 'new' 
-            )
-        """) 
-        await db.execute(""" 
-            CREATE TABLE IF NOT EXISTS documents ( 
-                id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                request_id INTEGER, 
-                file_id TEXT, 
-                file_name TEXT, 
-                file_type TEXT, 
-                file_size INTEGER, 
-                sent_at TEXT, 
-                FOREIGN KEY (request_id) REFERENCES requests(id) 
-            )
-         """) 
-         await db.commit()
-
-#===== ПЕРЕВОДЫ =====
-
-translations = { 
-  'ru': { 
-    'start': '👋 Привет! Я LegalBot. Выберите язык:\n🇷🇺 Русский\n🇬🇧 English', 
-    'canceled': '❌ Запрос отменен', 
-    'thanks': '✅ Спасибо! Ваша заявка принята', 
-    'error_missing_data': '⚠️ Заполните все поля', 
-    'contacts': '📞 Контакты: +123456789', 
-    'menu': 'Главное меню', 
-    'doc_type_error': '⚠️ Неподдерживаемый тип файла', 
-    'doc_size_error': '⚠️ Файл слишком большой (максимум 20 МБ)' 
-  }, 
-  'en': { 
-    'start': '👋 Hello! I am LegalBot. Choose language:\n🇬🇧 English\n🇷🇺 Русский', 
-    'canceled': '❌ Request canceled', 
-    'thanks': '✅ Thank you! Request accepted', 
-    'error_missing_data': '⚠️ Please fill all fields', 
-    'contacts': '📞 Contacts: +123456789', 
-    'menu': 'Main menu', 
-    'doc_type_error': '⚠️ Unsupported file type', 
-    'doc_size_error': '⚠️ File too large (max 20 MB)'
-  } 
+# ===== КОНСТАНТЫ =====
+MAX_DOCUMENT_SIZE = 20 * 1024 * 1024  # 20 MB
+ALLOWED_DOCUMENT_TYPES = {
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 }
 
-#===== СОСТОЯНИЯ =====
+# ===== ИНИЦИАЛИЗАЦИЯ БОТА =====
+API_TOKEN = os.getenv('BOT_TOKEN')
+ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
+ALLOWED_ORIGINS = [origin for origin in os.getenv('ALLOWED_ORIGINS', '*').split(',') if origin]
 
-class RequestForm(StatesGroup): 
-  waiting_for_name = State() 
-  waiting_for_phone = State() 
-  waiting_for_message = State() 
-  attach_docs = State()
+if not API_TOKEN:
+    raise ValueError("BOT_TOKEN не установлен в .env")
 
-#===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
+bot = Bot(
+    token=API_TOKEN,
+    default=DefaultBotProperties(parse_mode="HTML")
+)
+storage = MemoryStorage()
+dp = Dispatcher(storage=storage)
 
-async def get_lang(state: FSMContext) -> str: 
-  data = await state.get_data() 
-  return data.get('lang', 'ru')
+# ===== БАЗА ДАННЫХ =====
+async def init_db():
+    async with aiosqlite.connect('bot.db') as db:
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                name TEXT,
+                phone TEXT,
+                message TEXT,
+                created_at TEXT,
+                status TEXT DEFAULT 'new'
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id INTEGER,
+                file_id TEXT,
+                file_name TEXT,
+                file_type TEXT,
+                file_size INTEGER,
+                sent_at TEXT,
+                FOREIGN KEY (request_id) REFERENCES requests(id)
+            )
+        """)
+        await db.commit()
 
-def get_menu(lang: str) -> ReplyKeyboardMarkup: 
-  t = translations[lang] 
-  return ReplyKeyboardMarkup( 
-    keyboard=[ 
-      [KeyboardButton(text="Записаться на консультацию")], 
-      [KeyboardButton(text=t['contacts']), KeyboardButton(text="Админ-панель")] 
-    ], 
-    resize_keyboard=True 
-  )
+# ===== ПЕРЕВОДЫ =====
+translations = {
+    'ru': {
+        'start': '👋 Привет! Я LegalBot. Выберите язык:\n🇷🇺 Русский\n🇬🇧 English',
+        'canceled': '❌ Запрос отменен',
+        'thanks': '✅ Спасибо! Ваша заявка принята',
+        'error_missing_data': '⚠️ Заполните все поля',
+        'contacts': '📞 Контакты: +123456789',
+        'menu': 'Главное меню',
+        'doc_type_error': '⚠️ Неподдерживаемый тип файла',
+        'doc_size_error': '⚠️ Файл слишком большой (максимум 20 МБ)'
+    },
+    'en': {
+        'start': '👋 Hello! I am LegalBot. Choose language:\n🇬🇧 English\n🇷🇺 Русский',
+        'canceled': '❌ Request canceled',
+        'thanks': '✅ Thank you! Request accepted',
+        'error_missing_data': '⚠️ Please fill all fields',
+        'contacts': '📞 Contacts: +123456789',
+        'menu': 'Main menu',
+        'doc_type_error': '⚠️ Unsupported file type',
+        'doc_size_error': '⚠️ File too large (max 20 MB)'
+    }
+}
 
-#===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
+# ===== СОСТОЯНИЯ =====
+class RequestForm(StatesGroup):
+    waiting_for_name = State()
+    waiting_for_phone = State()
+    waiting_for_message = State()
+    attach_docs = State()
 
-@dp.message(Command("start")) 
-async def start_handler(message: types.Message, state: FSMContext): 
-  await state.clear() 
-  await state.update_data(lang='ru') 
-  await message.answer(translations['ru']['start'], reply_markup=get_menu('ru'))
+# ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
+async def get_lang(state: FSMContext) -> str:
+    data = await state.get_data()
+    return data.get('lang', 'ru')
 
-@dp.message(F.text.startswith('🇷🇺') | F.text.startswith('🇬🇧')) 
-async def lang_handler(message: types.Message, state: FSMContext): 
-  lang = 'ru' if message.text.startswith('🇷🇺') else 'en' 
-  await state.update_data(lang=lang) 
-  await message.answer(translations[lang]['menu'], reply_markup=get_menu(lang))
+def get_menu(lang: str) -> ReplyKeyboardMarkup:
+    t = translations[lang]
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Записаться на консультацию")],
+            [KeyboardButton(text=t['contacts']), KeyboardButton(text="Админ-панель")]
+        ],
+        resize_keyboard=True
+    )
 
-@dp.message(Command("cancel")) 
-async def cancel_handler(message: types.Message, state: FSMContext): 
-  lang = await get_lang(state) 
-  await state.clear() 
-  await message.answer(translations[lang]['canceled'], reply_markup=ReplyKeyboardRemove())
+# ===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
+@dp.message(Command("start"))
+async def start_handler(message: types.Message, state: FSMContext):
+    await state.clear()
+    await state.update_data(lang='ru')
+    await message.answer(translations['ru']['start'], reply_markup=get_menu('ru'))
 
-@dp.message(F.text == "Записаться на консультацию") 
-async def request_handler(message: types.Message, state: FSMContext): 
-  await state.set_state(RequestForm.waiting_for_name) 
-  await message.answer("Введите ваше имя:", reply_markup=ReplyKeyboardRemove())
+@dp.message(F.text.startswith('🇷🇺') | F.text.startswith('🇬🇧'))
+async def lang_handler(message: types.Message, state: FSMContext):
+    lang = 'ru' if message.text.startswith('🇷🇺') else 'en'
+    await state.update_data(lang=lang)
+    await message.answer(translations[lang]['menu'], reply_markup=get_menu(lang))
 
-@dp.message(RequestForm.waiting_for_name) 
-async def name_handler(message: types.Message, state: FSMContext): 
-if not message.text or len(message.text) < 2: 
-  lang = await get_lang(state) 
-  await message.answer(translations[lang]['error_missing_data']) 
-  return 
-  await state.update_data(name=message.text) 
-  await state.set_state(RequestForm.waiting_for_phone) 
-  await message.answer("Введите ваш телефон:")
+@dp.message(Command("cancel"))
+async def cancel_handler(message: types.Message, state: FSMContext):
+    lang = await get_lang(state)
+    await state.clear()
+    await message.answer(translations[lang]['canceled'], reply_markup=ReplyKeyboardRemove())
 
-@dp.message(RequestForm.waiting_for_phone) 
-async def phone_handler(message: types.Message, state: FSMContext): 
-if not message.text or len(message.text) < 5: 
-  lang = await get_lang(state) 
-  await message.answer(translations[lang]['error_missing_data']) 
-  return 
-  await state.update_data(phone=message.text) 
-  await state.set_state(RequestForm.waiting_for_message) 
-  await message.answer("Опишите вашу проблему:")
+@dp.message(F.text == "Записаться на консультацию")
+async def request_handler(message: types.Message, state: FSMContext):
+    await state.set_state(RequestForm.waiting_for_name)
+    await message.answer("Введите ваше имя:", reply_markup=ReplyKeyboardRemove())
 
-@dp.message(RequestForm.waiting_for_message) 
-async def message_handler(message: types.Message, state: FSMContext): 
-if not message.text or len(message.text) < 10: 
-  lang = await get_lang(state) 
-  await message.answer(translations[lang]['error_missing_data']) 
-  return 
-  await state.update_data(message_text=message.text) 
-  await state.set_state(RequestForm.attach_docs) 
-  await message.answer("Прикрепите документы (если есть) и нажмите /done")
+@dp.message(RequestForm.waiting_for_name)
+async def name_handler(message: types.Message, state: FSMContext):
+    if not message.text or len(message.text) < 2:
+        lang = await get_lang(state)
+        await message.answer(translations[lang]['error_missing_data'])
+        return
+    await state.update_data(name=message.text)
+    await state.set_state(RequestForm.waiting_for_phone)
+    await message.answer("Введите ваш телефон:")
 
-@dp.message(F.document, StateFilter(RequestForm.attach_docs)) 
-async def doc_handler(message: types.Message, state: FSMContext): 
-  lang = await get_lang(state) 
-  if message.document.mime_type not in ALLOWED_DOCUMENT_TYPES: 
-    await message.answer(translations[lang]['doc_type_error']) 
-    return 
-  if message.document.file_size > MAX_DOCUMENT_SIZE: 
-    await message.answer(translations[lang]['doc_size_error']) 
-    return 
-    data = await state.get_data() 
-    docs = data.get('docs', []) 
-    docs.append({ 
-      'file_id': message.document.file_id, 
-      'file_name': message.document.file_name, 
-      'file_type': message.document.mime_type, 
-      'file_size': message.document.file_size 
-    }) 
-    await state.update_data(docs=docs) 
+@dp.message(RequestForm.waiting_for_phone)
+async def phone_handler(message: types.Message, state: FSMContext):
+    if not message.text or len(message.text) < 5:
+        lang = await get_lang(state)
+        await message.answer(translations[lang]['error_missing_data'])
+        return
+    await state.update_data(phone=message.text)
+    await state.set_state(RequestForm.waiting_for_message)
+    await message.answer("Опишите вашу проблему:")
+
+@dp.message(RequestForm.waiting_for_message)
+async def message_handler(message: types.Message, state: FSMContext):
+    if not message.text or len(message.text) < 10:
+        lang = await get_lang(state)
+        await message.answer(translations[lang]['error_missing_data'])
+        return
+    await state.update_data(message_text=message.text)
+    await state.set_state(RequestForm.attach_docs)
+    await message.answer("Прикрепите документы (если есть) и нажмите /done")
+
+@dp.message(F.document & StateFilter(RequestForm.attach_docs))
+async def doc_handler(message: types.Message, state: FSMContext):
+    lang = await get_lang(state)
+    if message.document.mime_type not in ALLOWED_DOCUMENT_TYPES:
+        await message.answer(translations[lang]['doc_type_error'])
+        return
+    if message.document.file_size > MAX_DOCUMENT_SIZE:
+        await message.answer(translations[lang]['doc_size_error'])
+        return
+    data = await state.get_data()
+    docs = data.get('docs', [])
+    docs.append({
+        'file_id': message.document.file_id,
+        'file_name': message.document.file_name,
+        'file_type': message.document.mime_type,
+        'file_size': message.document.file_size
+    })
+    await state.update_data(docs=docs)
     await message.answer("Документ добавлен!")
 
-@dp.message(Command("done"), StateFilter(RequestForm.attach_docs)) 
-async def finish_handler(message: types.Message, state: FSMContext): 
-  data = await state.get_data() 
-  lang = await get_lang(state) 
-  if not all(k in data for k in ['name', 'phone', 'message_text']): a
-    wait message.answer(translations[lang]['error_missing_data']) 
-return 
-async with aiosqlite.connect('bot.db') as db: 
-  cursor = await db.execute( 
-    """INSERT INTO requests 
-    (user_id, name, phone, message, created_at) 
-    VALUES (?, ?, ?, ?, ?)""", 
-    (message.from_user.id, data['name'], data['phone'], data['message_text'], datetime.now(timezone.utc).isoformat()) 
-  ) 
-  request_id = cursor.lastrowid 
-  for doc in data.get('docs', []): 
-    await db.execute( 
-      """INSERT INTO documents (request_id, file_id, file_name, file_type, file_size, sent_at) 
-      VALUES (?, ?, ?, ?, ?, ?)""", 
-      (request_id, doc['file_id'], doc['file_name'], doc['file_type'], doc['file_size'], datetime.now(timezone.utc).isoformat()) 
-    ) 
-    await db.commit() 
-await message.answer(translations[lang]['thanks'], reply_markup=get_menu(lang)) 
-await state.clear()
+@dp.message(Command("done") & StateFilter(RequestForm.attach_docs))
+async def finish_handler(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = await get_lang(state)
+    
+    if not all(k in data for k in ['name', 'phone', 'message_text']):
+        await message.answer(translations[lang]['error_missing_data'])
+        return
+        
+    async with aiosqlite.connect('bot.db') as db:
+        cursor = await db.execute(
+            """INSERT INTO requests 
+            (user_id, name, phone, message, created_at) 
+            VALUES (?, ?, ?, ?, ?)""",
+            (message.from_user.id, data['name'], data['phone'], data['message_text'], 
+             datetime.now(timezone.utc).isoformat())
+        )
+        request_id = cursor.lastrowid
+        
+        for doc in data.get('docs', []):
+            await db.execute(
+                """INSERT INTO documents 
+                (request_id, file_id, file_name, file_type, file_size, sent_at) 
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (request_id, doc['file_id'], doc['file_name'], doc['file_type'],
+                 doc['file_size'], datetime.now(timezone.utc).isoformat())
+            )
+        await db.commit()
+    
+    await message.answer(translations[lang]['thanks'], reply_markup=get_menu(lang))
+    await state.clear()
+  
 
 # ===== FASTAPI НАСТРОЙКА =====
 @asynccontextmanager
