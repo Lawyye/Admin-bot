@@ -2,6 +2,7 @@ import logging
 import os
 from datetime import datetime, timezone
 import sqlite3
+from aiogram.filters import Command
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
