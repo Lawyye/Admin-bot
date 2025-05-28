@@ -22,6 +22,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 import redis.asyncio as redis
+from fastapi.responses import StreamingResponse
+from io import BytesIO
 import uvicorn
 
 # ===== НАСТРОЙКА ЛОГИРОВАНИЯ =====
@@ -503,6 +505,29 @@ async def health_check():
                 "error": str(e),
                 "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             }
+        )
+@app.get("/file/{file_id}")
+async def download_file(file_id: str):
+    try:
+        file = await bot.get_file(file_id)
+        file_path = file.file_path
+        file_url = f"https://api.telegram.org/file/bot{API_TOKEN}/{file_path}"
+
+        response = requests.get(file_url)
+        response.raise_for_status()
+
+        file_data = BytesIO(response.content)
+        filename = os.path.basename(file_path)
+
+        return StreamingResponse(file_data, media_type="application/octet-stream", headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        })
+
+    except Exception as e:
+        logger.error(f"Ошибка при скачивании файла: {e}")
+        return JSONResponse(
+            status_code=404,
+            content={"ok": False, "error": str(e)}
         )
 
 if __name__ == "__main__":
