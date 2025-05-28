@@ -610,4 +610,106 @@ async def admin_login_page(request: Request):
 @app.post("/admin/login")
 async def admin_login(request: Request):
     form_data = await request.form()
-    username = form_data.
+    username = form_data.get("username")
+    password = form_data.get("password")
+    
+    if (username == ADMIN_LOGIN1 and password == ADMIN_PASSWORD1) or \
+       (username == ADMIN_LOGIN2 and password == ADMIN_PASSWORD2):
+        request.session["admin"] = username
+        return RedirectResponse("/admin", status_code=302)
+    
+    return templates.TemplateResponse("admin_login.html", 
+        {"request": request, "error": "Invalid credentials"})
+
+@app.post("/admin/logout")
+async def admin_logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/admin/login", status_code=302)
+
+@app.get("/admin")
+async def admin_panel_page(request: Request):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    return templates.TemplateResponse("admin.html", {"request": request})
+
+# Health check
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+
+@app.get("/")
+async def root():
+    return {"message": "LegalBot is running", "timestamp": datetime.now().isoformat()}
+
+# Lifespan management
+    
+    webhook_set = False
+    try:
+        # Delete existing webhook
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("🗑 Old webhook deleted")
+        
+        # Set new webhook
+        await bot.set_webhook(
+            url=WEBHOOK_URL,
+            drop_pending_updates=True,
+            allowed_updates=dp.resolve_used_update_types()
+        )
+        webhook_set = True
+        logger.info(f"✅ Webhook successfully set to: {WEBHOOK_URL}")
+        
+        # Test webhook
+        webhook_info = await bot.get_webhook_info()
+        logger.info(f"📡 Webhook info: {webhook_info}")
+        
+    except Exception as e:
+        logger.critical(f"❌ Failed to set webhook: {e}")
+        raise
+    
+    try:
+        yield
+        
+    finally:
+        # Shutdown logic
+        logger.info("🛑 Shutting down LegalBot...")
+        
+        try:
+            if webhook_set:
+                await bot.delete_webhook(drop_pending_updates=True)
+                logger.info("🗑 Webhook deleted")
+        except Exception as e:
+            logger.error(f"⚠️ Error deleting webhook: {e}")
+
+        try:
+            await bot.session.close()
+            logger.info("🤖 Bot session closed")
+        except Exception as e:
+            logger.error(f"⚠️ Error closing bot session: {e}")
+
+        try:
+            await storage.close()
+            logger.info("🗄 Redis storage closed")
+        except Exception as e:
+            logger.error(f"⚠️ Error closing storage: {e}")
+
+        try:
+            conn.close()
+            logger.info("🔒 Database connection closed")
+        except Exception as e:
+            logger.error(f"⚠️ Error closing database: {e}")
+
+# Webhook handler
+@app.post(WEBHOOK_PATH)
+async def handle_webhook(update: dict):
+    try:
+        telegram_update = types.Update(**update)
+        await dp.feed_update(bot=bot, update=telegram_update)
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"❌ Webhook processing error: {e}")
+        return JSONResponse({"status": "error", "details": str(e)}, status_code=500)
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("legalbot:app", host="0.0.0.0", port=port, reload=False)
