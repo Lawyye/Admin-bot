@@ -517,29 +517,27 @@ async def health_check():
                 "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             }
         )
-@app.get("/file/{file_id}")
+@app.get("/download/{file_id}")
 async def download_file(file_id: str):
     try:
         file = await bot.get_file(file_id)
         file_path = file.file_path
         file_url = f"https://api.telegram.org/file/bot{API_TOKEN}/{file_path}"
 
-        response = requests.get(file_url)
-        response.raise_for_status()
-
-        file_data = BytesIO(response.content)
-        filename = os.path.basename(file_path)
-
-        return StreamingResponse(file_data, media_type="application/octet-stream", headers={
-            "Content-Disposition": f"attachment; filename={filename}"
-        })
-
+        async with aiohttp.ClientSession() as session:
+            async with session.get(file_url) as resp:
+                if resp.status != 200:
+                    raise HTTPException(status_code=resp.status, detail="Не удалось загрузить файл")
+                filename = file_path.split("/")[-1]
+                return StreamingResponse(resp.content, media_type="application/octet-stream", headers={
+                    "Content-Disposition": f"attachment; filename={filename}"
+                })
     except Exception as e:
         logger.error(f"Ошибка при скачивании файла: {e}")
-        return JSONResponse(
-            status_code=404,
-            content={"ok": False, "error": str(e)}
-        )
+           raise 
+        HTTPException(status_code=500, 
+        detail=str(e))
+        
 
 if __name__ == "__main__":
     asyncio.run(init_db())
