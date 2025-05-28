@@ -139,9 +139,8 @@ async def get_lang(state: FSMContext) -> str:
     data = await state.get_data()
     return data.get('lang', 'ru')
 
-def get_menu(lang: str):
+def get_menu(lang: str) -> ReplyKeyboardMarkup:
     t = translations[lang]
-    # .as_markup() формирует правильный dict для отправки Telegram
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=t['consultation'])],
@@ -150,7 +149,7 @@ def get_menu(lang: str):
             [KeyboardButton(text=t['back'])]
         ],
         resize_keyboard=True
-    ).as_markup()
+    )
 
 # ===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
 @dp.message(Command("start"))
