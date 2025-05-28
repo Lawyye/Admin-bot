@@ -303,6 +303,16 @@ async def contacts(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
+# Обработчик всех остальных сообщений
+@dp.message()
+async def handle_other_messages(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    lang = await get_lang(state, user_id)
+    await message.answer(
+        "Используйте меню для навигации / Use menu for navigation",
+        reply_markup=get_menu_kb(user_id, lang)
+    )
+
 # Webhook обработчик
 WEBHOOK_PATH = '/webhook'
 WEBHOOK_HOST = os.getenv('WEBHOOK_HOST', 'https://web-production-bb98.up.railway.app')
@@ -353,7 +363,7 @@ app.add_middleware(
 async def webhook(request: Request):
     try:
         update_data = await request.json()
-        telegram_update = types.Update(**update_data)
+        telegram_update = types.Update.model_validate(update_data)
         await dp.feed_update(bot=bot, update=telegram_update)
         return {"ok": True}
     except Exception as e:
