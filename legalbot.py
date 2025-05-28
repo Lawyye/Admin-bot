@@ -26,6 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import redis.asyncio as redis
 from fastapi.responses import StreamingResponse
 from io import BytesIO
+from starlette.responses import StreamingResponse
 import uvicorn
 
 # ===== НАСТРОЙКА ЛОГИРОВАНИЯ =====
@@ -533,9 +534,10 @@ async def download_file(file_id: str):
 
                 filename = file_path.split("/")[-1]
                 content = await resp.read()
-                return StreamingResponse(BytesIO(content), media_type="application/octet-stream", headers={
-                    "Content-Disposition": f"attachment; filename={filename}"
-                })
+                return content = await resp.read()
+return StreamingResponse(BytesIO(content), media_type="application/octet-stream", headers={
+    "Content-Disposition": f"attachment; filename={filename}"
+})
 
     except Exception as e:
         logger.error(f"Ошибка при скачивании файла: {e}")
