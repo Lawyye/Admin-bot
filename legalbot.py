@@ -11,7 +11,7 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, Update
 import redis.asyncio as redis
 from fastapi import FastAPI, Request, Form, HTTPException, status
 from fastapi.responses import RedirectResponse, JSONResponse
@@ -363,11 +363,13 @@ app.add_middleware(
 async def webhook(request: Request):
     try:
         update_data = await request.json()
-        telegram_update = types.Update.model_validate(update_data)
+        # Используем прямой импорт Update
+        telegram_update = Update(**update_data)
         await dp.feed_update(bot=bot, update=telegram_update)
         return {"ok": True}
     except Exception as e:
         logger.error(f"Webhook error: {e}")
+        logger.error(f"Update data: {update_data}")
         return {"ok": False}
 
 # Админ-панель маршруты
