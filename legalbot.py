@@ -521,25 +521,22 @@ async def health_check():
 @app.get("/download/{file_id}")
 async def download_file(file_id: str):
     try:
-        # Получаем объект файла от Telegram
         file = await bot.get_file(file_id)
-        file_path = file.file_path  # <-- это правильно для aiogram 3.x
-
-        # Собираем URL для загрузки файла
+        file_path = file.file_path
         api_token = os.getenv("BOT_TOKEN") or API_TOKEN
         file_url = f"https://api.telegram.org/file/bot{api_token}/{file_path}"
 
-        # Загружаем файл по URL
         async with aiohttp.ClientSession() as session:
             async with session.get(file_url) as resp:
                 if resp.status != 200:
                     raise HTTPException(status_code=resp.status, detail="Не удалось загрузить файл")
-                
+
                 filename = file_path.split("/")[-1]
-                return StreamingResponse(resp.content, media_type="application/octet-stream", headers={
+                content = await resp.read()
+                return StreamingResponse(BytesIO(content), media_type="application/octet-stream", headers={
                     "Content-Disposition": f"attachment; filename={filename}"
                 })
-                
+
     except Exception as e:
         logger.error(f"Ошибка при скачивании файла: {e}")
         raise HTTPException(status_code=500, detail=str(e))
