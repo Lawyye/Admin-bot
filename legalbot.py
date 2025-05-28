@@ -369,30 +369,31 @@ async def api_requests(request: Request):
     # query DB and return JSON
 
 @app.post("/admin/update")
-async def update_request(
-    request: Request,
-    request_id: int = Form(...),
-    status: str = Form(...),
-    reply: str = Form("")
-):
+async def update_request(request: Request, request_id: int = Form(...), status: str = Form(...), reply: str = Form("")):
     if not request.session.get("auth"):
+        # Если пользователь не авторизован — сразу возвращаем 401
         raise HTTPException(status_code=401)
+
     try:
         async with aiosqlite.connect("bot.db") as db:
             db.row_factory = aiosqlite.Row
             await db.execute("UPDATE requests SET status = ? WHERE id = ?", (status, request_id))
             await db.commit()
+
             if reply:
-                # send message
+                cursor = await db.execute("SELECT user_id FROM requests WHERE id = ?", (request_id,))
+                row = await cursor.fetchone()
+                if row and row["user_id"]:
+                    try:
+                        await bot.send_message(row["user_id"], f"📩 Ответ администратора:\n\n{reply}")
+                    except Exception as send_err:
+                        logger.error(f"Ошибка при отправке сообщения: {send_err}")
+
         return JSONResponse({"ok": True})
+
     except Exception as e:
         logger.error(f"Ошибка при обновлении заявки: {e}")
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
-
-@app.get("/admin/logout")
-async def admin_logout(request: Request):
-    request.session.clear()
-    return RedirectResponse("/admin-react", status_code=302)
     
             
     
