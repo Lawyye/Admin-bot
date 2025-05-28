@@ -15,6 +15,11 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
+from dotenv import load_dotenv
+import itsdangerous
+
+# Загрузка переменных окружения
+load_dotenv()
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -38,7 +43,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 redis_client = redis.Redis(host='redis', port=6379, db=0)
 
 # Middleware для сессий
-app.add_middleware(SessionMiddleware, secret_key="your-secret-key")
+app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET_KEY', 'your-secret-key'))
 
 # База данных
 conn = sqlite3.connect('bot.db', check_same_thread=False)
@@ -128,7 +133,7 @@ async def start_command(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-@dp.message(Text(text=["🇷🇺 Русский", "🇬🇧 English"]))
+@dp.message(Text(equals=["🇷🇺 Русский", "🇬🇧 English"], ignore_case=True))
 async def set_lang(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = 'ru' if message.text == "🇷🇺 Русский" else 'en'
@@ -139,7 +144,7 @@ async def set_lang(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-@dp.message(Text(text="Записаться на консультацию"))
+@dp.message(Text(equals="Записаться на консультацию", ignore_case=True))
 async def start_request(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -214,7 +219,7 @@ async def done_command(message: types.Message, state: FSMContext):
     logger.info(f"Processing /done command for user {message.from_user.id}")
     await finish_request(message, state)
 
-@dp.message(Text(text="⬅️ Назад"), RequestForm)
+@dp.message(Text(equals="⬅️ Назад", ignore_case=True), RequestForm)
 async def cancel_request(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -300,7 +305,7 @@ async def finish_request(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-@dp.message(Text(text=["Часто задаваемые вопросы", "FAQ"]))
+@dp.message(Text(equals=["Часто задаваемые вопросы", "FAQ"], ignore_case=True))
 async def faq(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
@@ -311,7 +316,7 @@ async def faq(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-@dp.message(Text(text="Контакты"))
+@dp.message(Text(equals="Контакты", ignore_case=True))
 async def contacts(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     lang = await get_lang(state, user_id)
