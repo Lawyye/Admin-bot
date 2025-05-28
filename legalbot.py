@@ -48,22 +48,9 @@ except Exception as e:
 
 storage = MemoryStorage()
 dp = Dispatcher(bot=bot, storage=storage)
-app = FastAPI()
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Настройка Redis
 redis_client = redis.Redis(host='redis', port=6379, db=0)
-
-# Middleware для сессий
-app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET_KEY', 'your-secret-key'))
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # База данных
 conn = sqlite3.connect('bot.db', check_same_thread=False)
@@ -316,7 +303,64 @@ async def contacts(message: types.Message, state: FSMContext):
         reply_markup=get_menu_kb(user_id, lang)
     )
 
-# Админ-панель
+# Webhook обработчик
+WEBHOOK_PATH = '/webhook'
+WEBHOOK_HOST = os.getenv('WEBHOOK_HOST', 'https://web-production-bb98.up.railway.app')
+WEBHOOK_URL = urljoin(WEBHOOK_HOST.rstrip('/') + '/', WEBHOOK_PATH.lstrip('/'))
+
+# Функции для lifecycle
+async def on_startup():
+    try:
+        await bot.delete_webhook()
+        logger.info(f"Trying to set webhook to: {WEBHOOK_URL}")
+        await bot.set_webhook(WEBHOOK_URL)
+        logger.info(f"Webhook verified: {await bot.get_webhook_info()}")
+    except Exception as e:
+        logger.error(f"Webhook setup failed: {str(e)}")
+
+async def on_shutdown():
+    try:
+        await bot.delete_webhook()
+        logger.info("Webhook deleted successfully")
+    except Exception as e:
+        logger.error(f"Failed to delete webhook: {e}")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await on_startup()
+    yield
+    await on_shutdown()
+
+# Создание приложения FastAPI с lifespan ОДИН РАЗ
+app = FastAPI(lifespan=lifespan)
+
+# Настройка templates и static files
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Middleware для сессий
+app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET_KEY', 'your-secret-key'))
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Webhook маршрут
+@app.post(WEBHOOK_PATH)
+async def webhook(request: Request):
+    try:
+        update_data = await request.json()
+        telegram_update = types.Update(**update_data)
+        await dp.feed_update(bot=bot, update=telegram_update)
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return {"ok": False}
+
+# Админ-панель маршруты
 @app.get("/admin/login")
 async def admin_login(request: Request):
     if request.session.get("admin"):
@@ -373,48 +417,6 @@ async def get_requests(request: Request):
     
     return {"requests": requests}
 
-# Webhook обработчик
-WEBHOOK_PATH = '/webhook'
-WEBHOOK_HOST = os.getenv('WEBHOOK_HOST', 'https://web-production-bb98.up.railway.app')
-WEBHOOK_URL = urljoin(WEBHOOK_HOST.rstrip('/') + '/', WEBHOOK_PATH.lstrip('/'))  # Используем urljoin
-
-@app.post(WEBHOOK_PATH)
-async def webhook(request: Request):  # Используем Request для доступа к сырым данным
-    try:
-        update_data = await request.json()
-        telegram_update = types.Update(**update_data)
-        await dp.feed_update(bot=bot, update=telegram_update)
-        return {"ok": True}
-    except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return {"ok": False}
-
 # Запуск сервера
-async def on_startup():
-    try:
-        await bot.delete_webhook()
-        logger.info(f"Trying to set webhook to: {WEBHOOK_URL}")  # Логируем URL
-        await bot.set_webhook(WEBHOOK_URL)
-        logger.info(f"Webhook verified: {await bot.get_webhook_info()}")
-    except Exception as e:
-        logger.error(f"Webhook setup failed: {str(e)}")
-
-async def on_shutdown():
-    try:
-        await bot.delete_webhook()
-        logger.info("Webhook deleted successfully")
-    except Exception as e:
-        logger.error(f"Failed to delete webhook: {e}")
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await on_startup()
-    yield
-    await on_shutdown()
-
-app = FastAPI(lifespan=lifespan)  # Используем lifespan
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
