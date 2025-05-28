@@ -246,7 +246,7 @@ async def admin_auth(
         request.session["auth"] = True
         return RedirectResponse("/admin", status_code=302)
     return templates.TemplateResponse(
-        "login.html", 
+        "admin_login.html", 
         {"request": request, "error": "Неверные данные"},
         status_code=401
     )
