@@ -639,8 +639,8 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    return {"message": "LegalBot is running", "timestamp": datetime.now().isoformat()}
-
+    logging.info("✅ LegalBot is running")
+yield
 # Lifespan management
     
     webhook_set = False
