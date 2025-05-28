@@ -230,7 +230,7 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET', 'se
 
 @app.get("/admin/login")
 async def admin_login(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse("login_admin.html", {"request": request})
 
 @app.post("/admin/login")
 async def admin_auth(
