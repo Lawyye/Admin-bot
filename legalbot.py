@@ -441,7 +441,7 @@ async def update_request(
     reply: str = Form("")
 ):
     if not request.session.get("auth"):
-        return RedirectResponse("/admin/login", status_code=302)
+        return RedirectResponse("/admin-react", status_code=302)
 
     try:
         async with aiosqlite.connect("bot.db") as db:
