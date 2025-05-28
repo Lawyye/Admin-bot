@@ -11,3 +11,4 @@ itsdangerous
 httpx
 python-multipart
 starlette
+aiohttp
