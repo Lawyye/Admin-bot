@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from urllib.parse import urljoin
 from typing import List, Optional
 
+from aiogram import Router
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -61,6 +62,8 @@ bot = Bot(
 )
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
+router = Router()
+dp.include_router(router)
 
 # ===== БАЗА ДАННЫХ =====
 async def init_db():
@@ -250,21 +253,23 @@ async def message_handler(message: types.Message, state: FSMContext):
     await state.set_state(RequestForm.attach_docs)
     await message.answer("Прикрепите документы (если есть) и нажмите /done")
 
-@dp.message(RequestForm.attach_docs & F.document)
+@router.message(StateFilter(RequestForm.attach_docs), F.document)
 async def doc_handler(message: types.Message, state: FSMContext):
     lang = await get_lang(state)
-   
+
     logger.info(f"[📎 ДОКУМЕНТ ПОЛУЧЕН] file_id: {message.document.file_id}")
     logger.info(f"Название: {message.document.file_name}")
     logger.info(f"Тип: {message.document.mime_type}")
     logger.info(f"Размер: {message.document.file_size}")
-   
+
     if message.document.mime_type not in ALLOWED_DOCUMENT_TYPES:
         await message.answer(translations[lang]['doc_type_error'])
         return
+
     if message.document.file_size > MAX_DOCUMENT_SIZE:
         await message.answer(translations[lang]['doc_size_error'])
         return
+
     data = await state.get_data()
     docs = data.get('docs', [])
     docs.append({
