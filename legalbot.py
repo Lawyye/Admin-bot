@@ -420,65 +420,7 @@ async def done_command(message: types.Message, state: FSMContext):
     await finish_request(message, state)
 
 async def finish_request(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    lang = await get_lang(state, user_id)
-    t = translations[lang]
-    
-    data = await state.get_data()
-    
-    # Save to database
-    with conn:
-        cursor = conn.execute(
-            """INSERT INTO requests (user_id, name, phone, message, created_at, status)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (
-                user_id,
-                data['name'],
-                data['phone'],
-                data['message_text'],
-                datetime.now().isoformat(),
-                'new'
-            )
-        )
-        request_id = cursor.lastrowid
-        
-        # Save documents if any
-        documents = data.get('documents', [])
-        for doc in documents:
-            conn.execute(
-                """INSERT INTO documents (request_id, file_id, file_name, sent_at)
-                   VALUES (?, ?, ?, ?)""",
-                (request_id, doc['file_id'], doc['file_name'], datetime.now().isoformat())
-            )
-    
-    # Notify admin
-    if ADMIN_CHAT_ID:
-        admin_text = f"""
-🆕 Новая заявка #{request_id}
 
-👤 Имя: {data['name']}
-📞 Телефон: {data['phone']}
-💬 Сообщение: {data['message_text']}
-📅 Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}
-"""
-        try:
-            await bot.send_message(ADMIN_CHAT_ID, admin_text)
-            
-            # Send documents to admin
-            for doc in documents:
-                await bot.send_document(
-                    ADMIN_CHAT_ID,
-                    doc['file_id'],
-                    caption=f"Документ к заявке #{request_id}: {doc['file_name']}"
-                )
-        except Exception as e:
-            logger.error(f"Error sending to admin: {e}")
-    
-    await state.clear()
-    await message.answer(
-        t['thanks'],
-        reply_markup=get_menu_kb(user_id, lang)
-    )
 
 @dp.message(F.text.in_(["Часто задаваемые вопросы", "FAQ"]))
 async def faq(message: types.Message, state: FSMContext):
@@ -497,8 +439,67 @@ async def contacts(message: types.Message, state: FSMContext):
     lang = await get_lang(state, user_id)
     t = translations[lang]
     
+    async def finish_request(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    lang = await get_lang(state, user_id)
+    t = translations[lang]
+
+    data = await state.get_data()
+
+    # Save to database
+    with conn:
+        logger.info(f"Saving request for user {user_id}: {data}")
+        cursor = conn.execute(
+            """INSERT INTO requests (user_id, name, phone, message, created_at, status)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                user_id,
+                data['name'],
+                data['phone'],
+                data['message_text'],
+                datetime.now().isoformat(),
+                'new'
+            )
+        )
+        request_id = cursor.lastrowid
+        logger.info(f"Request saved with ID: {request_id}")
+
+        # Save documents if any
+        documents = data.get('documents', [])
+        for doc in documents:
+            conn.execute(
+                """INSERT INTO documents (request_id, file_id, file_name, sent_at)
+                   VALUES (?, ?, ?, ?)""",
+                (request_id, doc['file_id'], doc['file_name'], datetime.now().isoformat())
+            )
+        logger.info(f"Saved {len(documents)} documents for request {request_id}")
+
+    # Notify admin
+    if ADMIN_CHAT_ID:
+        admin_text = f"""
+🆕 Новая заявка #{request_id}
+
+👤 Имя: {data['name']}
+📞 Телефон: {data['phone']}
+💬 Сообщение: {data['message_text']}
+📅 Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}
+"""
+        try:
+            await bot.send_message(ADMIN_CHAT_ID, admin_text)
+
+            # Send documents to admin
+            for doc in documents:
+                await bot.send_document(
+                    ADMIN_CHAT_ID,
+                    doc['file_id'],
+                    caption=f"Документ к заявке #{request_id}: {doc['file_name']}"
+                )
+        except Exception as e:
+            logger.error(f"Error sending to admin: {e}")
+
+    await state.clear()
     await message.answer(
-        t['contacts'],
+        t['thanks'],
         reply_markup=get_menu_kb(user_id, lang)
     )
 
@@ -613,7 +614,8 @@ logger.info(f"Webhook handler registered for path: {WEBHOOK_PATH}")  # Логи�
 async def get_requests(request: Request):
     if not request.session.get("admin"):
         return JSONResponse({"error": "Unauthorized"}, status_code=403)
-    
+
+    logger.info("Fetching requests from database")
     rows = conn.execute("""
         SELECT r.*, GROUP_CONCAT(d.file_name) as documents
         FROM requests r
@@ -621,7 +623,8 @@ async def get_requests(request: Request):
         GROUP BY r.id
         ORDER BY r.created_at DESC
     """).fetchall()
-    
+    logger.info(f"Found {len(rows)} rows in database")
+
     requests = []
     for row in rows:
         requests.append({
@@ -634,7 +637,8 @@ async def get_requests(request: Request):
             'status': row['status'],
             'documents': row['documents'].split(',') if row['documents'] else []
         })
-    
+
+    logger.info(f"Returning {len(requests)} requests")
     return {"requests": requests}
 
 @app.post("/admin/api/reply")
