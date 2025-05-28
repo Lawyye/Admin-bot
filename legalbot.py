@@ -24,7 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import redis.asyncio as redis 
 import uvicorn
 
-===== НАСТРОЙКА ЛОГИРОВАНИЯ =====
+#===== НАСТРОЙКА ЛОГИРОВАНИЯ =====
 
 logging.basicConfig(level=logging.INFO) 
 logger = logging.getLogger(name) 
@@ -37,11 +37,11 @@ import fastapi
 logger.info(f"aiogram version: {aiogram.version}") 
 logger.info(f"fastapi version: {fastapi.version}")
 
-===== КОНСТАНТЫ =====
+#===== КОНСТАНТЫ =====
 
 MAX_DOCUMENT_SIZE = 20 * 1024 * 1024  # 20 MB ALLOWED_DOCUMENT_TYPES = {'application/pdf', 'image/jpeg', 'image/png', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
 
-===== ИНИЦИАЛИЗАЦИЯ БОТА =====
+#===== ИНИЦИАЛИЗАЦИЯ БОТА =====
 
 API_TOKEN = os.getenv('BOT_TOKEN') 
 ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID') 
@@ -57,7 +57,7 @@ bot = Bot(
 storage = MemoryStorage() 
 dp = Dispatcher(storage=storage)
 
-===== БАЗА ДАННЫХ =====
+#===== БАЗА ДАННЫХ =====
 
 async def init_db(): 
     async with aiosqlite.connect('bot.db') as db: 
@@ -84,7 +84,7 @@ async def init_db():
   )""") 
   await db.commit()
 
-===== ПЕРЕВОДЫ =====
+#===== ПЕРЕВОДЫ =====
 
 translations = { 
   'ru': { 
@@ -109,7 +109,7 @@ translations = {
   } 
 }
 
-===== СОСТОЯНИЯ =====
+#===== СОСТОЯНИЯ =====
 
 class RequestForm(StatesGroup): 
   waiting_for_name = State() 
@@ -117,7 +117,7 @@ class RequestForm(StatesGroup):
   waiting_for_message = State() 
   attach_docs = State()
 
-===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
+#===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
 
 async def get_lang(state: FSMContext) -> str: 
   data = await state.get_data() 
@@ -133,7 +133,7 @@ def get_menu(lang: str) -> ReplyKeyboardMarkup:
     resize_keyboard=True 
   )
 
-===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
+#===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
 
 @dp.message(Command("start")) 
 async def start_handler(message: types.Message, state: FSMContext): 
