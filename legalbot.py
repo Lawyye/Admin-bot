@@ -23,10 +23,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
-import redis.asyncio as redis
 from fastapi.responses import StreamingResponse
 from io import BytesIO
-from starlette.responses import StreamingResponse
 import uvicorn
 
 # ===== НАСТРОЙКА ЛОГИРОВАНИЯ =====
@@ -80,7 +78,7 @@ async def init_db():
                 created_at TEXT,
                 status TEXT DEFAULT 'new'
             )
-        """)
+        """ )
         await db.execute("""
             CREATE TABLE IF NOT EXISTS documents (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,7 +90,7 @@ async def init_db():
                 sent_at TEXT,
                 FOREIGN KEY (request_id) REFERENCES requests(id)
             )
-        """)
+        """ )
         await db.commit()
 
 # ===== ПЕРЕВОДЫ =====
