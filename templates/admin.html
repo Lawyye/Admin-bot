@@ -38,7 +38,7 @@
                         <td>{{ r['status'] }}</td>
                         <td>
                             {% for d in r.get('documents', []) %}
-                                <a href="https://api.telegram.org/file/bot{{ bot_token }}/{{ d['file_id'] }}" target="_blank">📎 {{ d['file_name'] }}</a><br>
+                                <a href="/download/{{ d['file_id'] }}" target="_blank">📎 {{ d['file_name'] }}</a><br>
                             {% endfor %}
                         </td>
                         <td>
