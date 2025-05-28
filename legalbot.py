@@ -7,7 +7,6 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from aiogram.webhook import start_webhook
 import redis.asyncio as redis
 from fastapi import FastAPI, Request, Form, HTTPException, status
 from fastapi.responses import RedirectResponse, JSONResponse
@@ -16,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from dotenv import load_dotenv
 import itsdangerous
+import uvicorn
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -387,20 +387,27 @@ async def get_requests(request: Request):
     logger.info(f"Returning {len(requests)} requests")
     return {"requests": requests}
 
-# Webhook
-async def on_startup(_):
+# Webhook обработчик
+@app.post(WEBHOOK_PATH)
+async def webhook(request: Request):
+    update = types.Update(**await request.json())
+    await dp.feed_update(bot=bot, update=update)
+    return {"ok": True}
+
+# Запуск сервера
+async def on_startup():
     await bot.set_webhook(WEBHOOK_URL)
 
-async def on_shutdown(_):
+async def on_shutdown():
     await bot.delete_webhook()
 
-if __name__ == '__main__':
-    start_webhook(
-        dispatcher=dp,
-        webhook_path=WEBHOOK_PATH,
-        on_startup=on_startup,
-        on_shutdown=on_shutdown,
-        skip_updates=True,
-        host='0.0.0.0',
-        port=8080,
-    )
+@app.on_event("startup")
+async def startup_event():
+    await on_startup()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await on_shutdown()
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8080)
