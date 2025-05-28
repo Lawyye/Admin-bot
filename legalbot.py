@@ -534,14 +534,14 @@ async def download_file(file_id: str):
 
                 filename = file_path.split("/")[-1]
                 content = await resp.read()
-                return content = await resp.read()
-return StreamingResponse(BytesIO(content), media_type="application/octet-stream", headers={
-    "Content-Disposition": f"attachment; filename={filename}"
-})
+                return StreamingResponse(BytesIO(content), media_type="application/octet-stream", headers={
+                    "Content-Disposition": f"attachment; filename={filename}"
+                })
 
     except Exception as e:
         logger.error(f"Ошибка при скачивании файла: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+        
         
 
 if __name__ == "__main__":
