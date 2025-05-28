@@ -472,7 +472,12 @@ async def update_request(
     except Exception as e:
         logger.error(f"❌ Ошибка при обновлении заявки: {e}")
         return RedirectResponse("/admin", status_code=500)
-        
+
+@app.get("/admin/logout")
+async def admin_logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/admin/login")
+    
 @app.post("/webhook")
 async def webhook_handler(request: Request):
     try:
