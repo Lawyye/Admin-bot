@@ -2,7 +2,6 @@ import logging
 import os
 from datetime import datetime, timezone
 import sqlite3
-from aiogram.filters import Command
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
@@ -18,21 +17,29 @@ from dotenv import load_dotenv
 import itsdangerous
 import uvicorn
 
-# Загрузка переменных окружения
-load_dotenv()
-
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Настройка бота
-API_TOKEN = os.getenv('BOT_TOKEN', 'YOUR_BOT_TOKEN')
-WEBHOOK_HOST = os.getenv('WEBHOOK_HOST', 'https://web-production-bb98.up.railway.app')
-WEBHOOK_PATH = '/webhook'
-WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')  # Установите в переменных окружения
+# Загрузка переменных окружения
+load_dotenv()
 
-bot = Bot(token=API_TOKEN)
+# Настройка бота
+API_TOKEN = os.getenv('BOT_TOKEN')
+logger.info(f"Loaded API_TOKEN: {API_TOKEN}")
+
+# Проверка токена перед созданием бота
+if not API_TOKEN:
+    logger.error("API_TOKEN is empty. Please set BOT_TOKEN in .env file.")
+    raise ValueError("API_TOKEN is empty. Please set BOT_TOKEN in .env file.")
+
+try:
+    bot = Bot(token=API_TOKEN)
+    logger.info("Bot initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize bot: {e}")
+    raise
+
 storage = MemoryStorage()
 dp = Dispatcher(bot=bot, storage=storage)
 app = FastAPI()
@@ -389,6 +396,9 @@ async def get_requests(request: Request):
     return {"requests": requests}
 
 # Webhook обработчик
+WEBHOOK_PATH = '/webhook'
+WEBHOOK_URL = f"{os.getenv('WEBHOOK_HOST', 'https://web-production-bb98.up.railway.app')}{WEBHOOK_PATH}"
+
 @app.post(WEBHOOK_PATH)
 async def webhook(request: Request):
     update = types.Update(**await request.json())
@@ -397,10 +407,19 @@ async def webhook(request: Request):
 
 # Запуск сервера
 async def on_startup():
-    await bot.set_webhook(WEBHOOK_URL)
+    try:
+        await bot.set_webhook(WEBHOOK_URL)
+        logger.info(f"Webhook set successfully: {WEBHOOK_URL}")
+    except Exception as e:
+        logger.error(f"Failed to set webhook: {e}")
+        raise
 
 async def on_shutdown():
-    await bot.delete_webhook()
+    try:
+        await bot.delete_webhook()
+        logger.info("Webhook deleted successfully")
+    except Exception as e:
+        logger.error(f"Failed to delete webhook: {e}")
 
 @app.on_event("startup")
 async def startup_event():
