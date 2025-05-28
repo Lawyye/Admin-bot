@@ -2,6 +2,8 @@ import logging
 import os
 from datetime import datetime, timezone
 import sqlite3
+from urllib.parse import urljoin
+from fastapi import Request
 from contextlib import asynccontextmanager
 from fastapi import UploadFile, File
 from aiogram.filters import Command
@@ -17,6 +19,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
 import itsdangerous
 import uvicorn
 
@@ -54,6 +57,13 @@ redis_client = redis.Redis(host='redis', port=6379, db=0)
 
 # Middleware для сессий
 app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET_KEY', 'your-secret-key'))
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # База данных
 conn = sqlite3.connect('bot.db', check_same_thread=False)
@@ -365,12 +375,14 @@ async def get_requests(request: Request):
 
 # Webhook обработчик
 WEBHOOK_PATH = '/webhook'
-WEBHOOK_URL = f"{os.getenv('WEBHOOK_HOST', 'https://web-production-bb98.up.railway.app')}{WEBHOOK_PATH}"
+WEBHOOK_HOST = os.getenv('WEBHOOK_HOST', 'https://web-production-bb98.up.railway.app')
+WEBHOOK_URL = urljoin(WEBHOOK_HOST.rstrip('/') + '/', WEBHOOK_PATH.lstrip('/'))  # Используем urljoin
 
 @app.post(WEBHOOK_PATH)
-async def webhook(update: dict):
+async def webhook(request: Request):  # Используем Request для доступа к сырым данным
     try:
-        telegram_update = types.Update(**update)
+        update_data = await request.json()
+        telegram_update = types.Update(**update_data)
         await dp.feed_update(bot=bot, update=telegram_update)
         return {"ok": True}
     except Exception as e:
@@ -380,11 +392,12 @@ async def webhook(update: dict):
 # Запуск сервера
 async def on_startup():
     try:
+        await bot.delete_webhook()
+        logger.info(f"Trying to set webhook to: {WEBHOOK_URL}")  # Логируем URL
         await bot.set_webhook(WEBHOOK_URL)
-        logger.info(f"Webhook set successfully: {WEBHOOK_URL}")
+        logger.info(f"Webhook verified: {await bot.get_webhook_info()}")
     except Exception as e:
-        logger.error(f"Failed to set webhook: {e}")
-        raise
+        logger.error(f"Webhook setup failed: {str(e)}")
 
 async def on_shutdown():
     try:
