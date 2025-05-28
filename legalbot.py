@@ -190,7 +190,7 @@ async def finish_handler(message: types.Message, state: FSMContext):
 async def lifespan(app: FastAPI):
     await bot.delete_webhook()
     WEBHOOK_URL = urljoin(
-        os.getenv('WEBHOOK_HOST', 'https://your-domain.com'), 
+        os.getenv('WEBHOOK_HOST', 'https://web-production-bb98.up.railway.app'), 
         '/webhook'
     )
     await bot.set_webhook(WEBHOOK_URL)
