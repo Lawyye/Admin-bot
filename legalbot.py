@@ -71,14 +71,27 @@ async def init_db():
         await db.execute("""
             CREATE TABLE IF NOT EXISTS requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
+                user_id INTEGER,  # Добавьте это поле
                 name TEXT,
                 phone TEXT,
                 message TEXT,
                 created_at TEXT,
                 status TEXT DEFAULT 'new'
             )
-        """ )
+        """)
+        
+        # Проверяем и добавляем колонку, если её нет
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = await cursor.fetchall()
+        column_names = [col[1] for col in columns]
+        
+        if 'user_id' not in column_names:
+            await db.execute("ALTER TABLE requests ADD COLUMN user_id INTEGER")
+            logger.info("Added user_id column to requests table")
+        
+        # ... остальной код создания таблиц ...
+        
+        await db.commit()
         await db.execute("""
             CREATE TABLE IF NOT EXISTS documents (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -417,11 +430,47 @@ async def update_request(
 ):
     if not request.session.get("auth"):
         raise HTTPException(status_code=401)
+    
     try:
-        # … обновление в БД и отправка сообщения …
+        # Получаем данные о заявке
+        async with aiosqlite.connect("bot.db") as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT * FROM requests WHERE id = ?", (request_id,))
+            request_data = await cursor.fetchone()
+            
+            if not request_data:
+                return JSONResponse({"ok": False, "error": "Заявка не найдена"}, status_code=404)
+            
+            # Обновляем статус в базе данных
+            await db.execute(
+                "UPDATE requests SET status = ? WHERE id = ?",
+                (status, request_id)
+            )
+            await db.commit()
+            
+            # Если есть ответ для пользователя
+            if reply:
+                user_id = request_data["user_id"]
+                
+                # Отправляем сообщение пользователю через бота
+                try:
+                    await bot.send_message(
+                        chat_id=user_id,
+                        text=f"✉️ Ответ от администратора:\n\n{reply}"
+                    )
+                    logger.info(f"Сообщение отправлено пользователю {user_id}: {reply}")
+                except Exception as e:
+                    logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+                    # Можно сохранить ошибку в базу или отправить администратору
+        
         return JSONResponse({"ok": True})
+    
     except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+        logger.error(f"Ошибка при обновлении заявки: {str(e)}")
+        return JSONResponse(
+            {"ok": False, "error": str(e)},
+            status_code=500
+        )
         
             
     
