@@ -440,41 +440,43 @@ async def api_requests(request: Request):
     if not request.session.get("auth"):
         raise HTTPException(status_code=401)
 
-    async with aiosqlite.connect("bot.db") as db:
-        db.row_factory = aiosqlite.Row
-        cursor = await db.execute("""
-    SELECT 
-        id, 
-        user_id, 
-        name, 
-        phone, 
-        message, 
-        created_at, 
-        status 
-    FROM requests 
-    ORDER BY created_at DESC
-""")
-        rows = await cursor.fetchall()
-
-    result = []
-    for r in rows:
+    try:
         async with aiosqlite.connect("bot.db") as db:
             db.row_factory = aiosqlite.Row
-            docs_cursor = await db.execute("SELECT * FROM documents WHERE request_id = ?", (r["id"],))
-            docs = await docs_cursor.fetchall()
-        
-        # Добавляем проверку наличия поля message
-        message = r.get('message', '')
-        if len(message) > 300:
-            message = message[:297] + "..."
-        
-        result.append({
-            **dict(r),
-            "message": message,  # Используем обрезанное сообщение
-            "documents": [dict(d) for d in docs]
-        })
+            cursor = await db.execute("SELECT * FROM requests ORDER BY created_at DESC")
+            rows = await cursor.fetchall()
 
-    return result
+        result = []
+        for r in rows:
+            async with aiosqlite.connect("bot.db") as db:
+                db.row_factory = aiosqlite.Row
+                docs_cursor = await db.execute("SELECT * FROM documents WHERE request_id = ?", (r["id"],))
+                docs = await docs_cursor.fetchall()
+            
+            # Исправлено: обращение к полю через индекс вместо .get()
+            message = r["message"] if "message" in r.keys() else ""
+            if len(message) > 300:
+                message = message[:297] + "..."
+            
+            result.append({
+                "id": r["id"],
+                "user_id": r["user_id"],
+                "name": r["name"],
+                "phone": r["phone"],
+                "message": message,
+                "created_at": r["created_at"],
+                "status": r["status"],
+                "documents": [dict(d) for d in docs]
+            })
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Ошибка при получении заявок: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal server error"}
+        )
 
 @app.post("/admin/update")
 async def update_request(
