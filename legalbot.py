@@ -428,7 +428,10 @@ async def api_requests(request: Request):
             **dict(r),
             "documents": [dict(d) for d in docs]
         })
-
+# Обрезаем длинные сообщения
+for item in result:
+    if len(item['message']) > 300:
+        item['message'] = item['message'][:297] + "..."
     return result
 
 @app.post("/admin/update")
