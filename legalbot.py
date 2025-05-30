@@ -73,12 +73,15 @@ dp.include_router(router)
 async def init_db():
     logger.info("Инициализация базы данных...")
     try:
-        # Проверяем доступность файла базы данных
+        # Проверяем доступность файла базы данных (опционально)
         if not os.path.exists('bot.db'):
-            logger.warning("Database file not found, creating new one")
+            logger.warning("Файл базы данных не найден, будет создан новый")
 
         async with aiosqlite.connect('bot.db') as db:
-            # Создаем таблицу requests
+            # Включаем доступ к полям по именам
+            db.row_factory = aiosqlite.Row
+
+            # Создаем таблицу requests, если не существует
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS requests (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,45 +89,59 @@ async def init_db():
                     name TEXT,
                     phone TEXT,
                     message TEXT,
-                    created_at TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     status TEXT DEFAULT 'new'
                 )
             """)
-            
+
             # Проверяем существование колонки user_id
             cursor = await db.execute("PRAGMA table_info(requests)")
             columns = await cursor.fetchall()
-            column_names = [col[1] for col in columns]
+            column_names = [col['name'] for col in columns]  # Используем именованный доступ
             
             if 'user_id' not in column_names:
                 logger.info("Добавляем колонку user_id в таблицу requests")
                 await db.execute("ALTER TABLE requests ADD COLUMN user_id INTEGER")
                 logger.info("Колонка user_id успешно добавлена")
-            
-            # Создаем таблицу documents
+
+            # Создаем таблицу documents, если не существует
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS documents (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     request_id INTEGER,
-                    file_id TEXT,
-                    file_name TEXT,
-                    file_type TEXT,
-                    file_size INTEGER,
-                    sent_at TEXT,
+                    file_id TEXT NOT NULL,
+                    file_name TEXT NOT NULL,
+                    file_type TEXT NOT NULL,
+                    file_size INTEGER NOT NULL,
+                    sent_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (request_id) REFERENCES requests(id) ON DELETE CASCADE
                 )
             """)
-            
-            # Проверяем существующие таблицы
+
+            # Создаем индекс для улучшения производительности
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_documents_request_id 
+                ON documents(request_id)
+            """)
+
+            # Проверяем список таблиц для отладки
             cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table'")
             tables = await cursor.fetchall()
-            logger.info(f"Existing tables: {[t['name'] for t in tables]}")
-            
+            logger.info(f"Существующие таблицы: {[t['name'] for t in tables]}")
+
+            # Проверяем структуру таблицы requests для отладки
+            cursor = await db.execute("PRAGMA table_info(requests)")
+            columns = await cursor.fetchall()
+            logger.info("Структура таблицы requests:")
+            for col in columns:
+                logger.info(f"  {col['name']}: {col['type']}")
+
             await db.commit()
             logger.info("База данных успешно инициализирована")
+
     except Exception as e:
-        logger.error(f"Ошибка при инициализации базы данных: {str(e)}")
-        raise
+        logger.error(f"Критическая ошибка при инициализации базы данных: {str(e)}")
+        raise RuntimeError(f"Ошибка инициализации БД: {str(e)}") from e
 
 # ===== ПЕРЕВОДЫ =====
 translations = {
