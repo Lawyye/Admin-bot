@@ -1,182 +1,344 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LegalBot Admin</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: {
-                            600: '#7c3aed',
-                            700: '#6d28d9',
-                        },
-                        dark: {
-                            800: '#1e293b',
-                            900: '#0f172a',
-                        }
-                    },
-                    animation: {
-                        'fade-in': 'fadeIn 0.3s ease-in',
-                        'slide-up': 'slideUp 0.3s ease-out'
-                    },
-                    keyframes: {
-                        fadeIn: {
-                            '0%': { opacity: '0' },
-                            '100%': { opacity: '1' }
-                        },
-                        slideUp: {
-                            '0%': { transform: 'translateY(10px)', opacity: '0' },
-                            '100%': { transform: 'translateY(0)', opacity: '1' }
-                        }
-                    }
-                }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LegalBot Admin</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              600: '#7c3aed',
+              700: '#6d28d9',
+            },
+            dark: {
+              800: '#1e293b',
+              900: '#0f172a',
             }
+          },
+          animation: {
+            'fade-in': 'fadeIn 0.3s ease-in',
+            'slide-up': 'slideUp 0.3s ease-out'
+          },
+          keyframes: {
+            fadeIn: {
+              '0%': { opacity: '0' },
+              '100%': { opacity: '1' }
+            },
+            slideUp: {
+              '0%': { transform: 'translateY(10px)', opacity: '0' },
+              '100%': { transform: 'translateY(0)', opacity: '1' }
+            }
+          }
         }
-    </script>
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        @media (max-width: 767px) {
-            .sidebar {
-                width: 100%;
-                position: fixed;
-                bottom: 0;
-                left: 0;
-                height: auto;
-                z-index: 50;
-                flex-direction: row;
-                padding: 0.5rem;
-            }
-            .sidebar-nav {
-                display: flex;
-                width: 100%;
-                justify-content: space-around;
-            }
-            .sidebar-nav a {
-                flex-direction: column;
-                padding: 0.5rem;
-                font-size: 0.75rem;
-            }
-            .sidebar-nav a i {
-                margin-right: 0;
-                margin-bottom: 0.25rem;
-            }
-            .sidebar-nav span.count {
-                position: absolute;
-                top: -5px;
-                right: -5px;
-            }
-            .main-content {
-                margin-left: 0;
-                padding-bottom: 70px;
-            }
-            .card {
-                padding: 1rem;
-            }
-            .card-header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-            .status-badge {
-                margin-top: 0.5rem;
-                align-self: flex-start;
-            }
-        }
-    </style>
+      }
+    }
+  </script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- React + ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+<style>
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+  }
+</style>
 </head>
-<body class="bg-gray-100 dark:bg-dark-900 text-gray-800 dark:text-gray-200 transition-colors duration-200">
-    <div class="flex min-h-screen">
-        <!-- Сайдбар -->
-        <div class="sidebar bg-white dark:bg-dark-800 shadow-lg w-64 flex-shrink-0 flex flex-col">
-            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-                <h1 class="text-xl font-bold flex items-center">
-                    <i class="fas fa-scale-balanced text-primary-600 mr-2"></i>
-                    LegalBot Admin
-                </h1>
-            </div>
-            <div class="p-4">
-                <div class="relative mb-6">
-                    <input type="text" placeholder="Поиск..." 
-                        class="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-dark-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-600">
-                    <i class="fas fa-search absolute left-3 top-2.5 text-gray-500"></i>
-                </div>
-                <nav class="sidebar-nav">
-                    <a href="#" class="flex items-center px-3 py-2 text-sm font-medium rounded-lg bg-primary-100 dark:bg-dark-700 text-primary-700 dark:text-white mb-2 relative">
-                        <i class="fas fa-list mr-3"></i>
-                        Все заявки
-                        <span class="count bg-gray-200 dark:bg-gray-700 text-xs px-2 py-0.5 rounded-full ml-auto">0</span>
-                    </a>
-                    <a href="#" class="flex items-center px-3 py-2 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 mb-2 relative">
-                        <i class="fas fa-bell mr-3"></i>
-                        Новые
-                        <span class="count bg-gray-200 dark:bg-gray-700 text-xs px-2 py-0.5 rounded-full ml-auto">0</span>
-                    </a>
-                    <a href="#" class="flex items-center px-3 py-2 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 mb-2 relative">
-                        <i class="fas fa-gears mr-3"></i>
-                        В работе
-                        <span class="count bg-gray-200 dark:bg-gray-700 text-xs px-2 py-0.5 rounded-full ml-auto">0</span>
-                    </a>
-                    <a href="#" class="flex items-center px-3 py-2 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 mb-2 relative">
-                        <i class="fas fa-check mr-3"></i>
-                        Завершенные
-                        <span class="count bg-gray-200 dark:bg-gray-700 text-xs px-2 py-0.5 rounded-full ml-auto">0</span>
-                    </a>
-                </nav>
-            </div>
-            <div class="mt-auto p-4 border-t border-gray-200 dark:border-gray-700">
-                <a href="/admin/logout" class="flex items-center justify-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-                    <i class="fas fa-sign-out-alt mr-2"></i>
-                    Выйти
-                </a>
-            </div>
-        </div>
+<body class="bg-dark-900 text-gray-100 min-h-screen font-sans">
 
-        <!-- Основное содержимое -->
-        <div class="main-content flex-1 p-6">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold">Все заявки</h2>
-                <div class="text-sm text-gray-500 dark:text-gray-400">
-                    <i class="far fa-calendar-alt mr-1"></i>
-                    <span id="current-date"></span>
-                </div>
-            </div>
+  <div id="root"></div>
 
-            <div class="bg-white dark:bg-dark-800 rounded-lg shadow p-6">
-                <div class="text-center py-8">
-                    <i class="fas fa-inbox text-4xl text-gray-400 dark:text-gray-600 mb-3"></i>
-                    <h3 class="text-xl font-medium text-gray-700 dark:text-gray-300 mb-1">Нет заявок</h3>
-                    <p class="text-gray-500 dark:text-gray-400">Здесь будут отображаться заявки, соответствующие выбранному фильтру</p>
-                </div>
-            </div>
-        </div>
-    </div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
 
-    <script>
-        // Установка текущей даты
-        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-        document.getElementById('current-date').textContent = new Date().toLocaleDateString('ru-RU', options);
-        
-        // Адаптивное поведение
-        function handleResize() {
-            const sidebar = document.querySelector('.sidebar');
-            const mainContent = document.querySelector('.main-content');
-            
-            if (window.innerWidth < 768) {
-                sidebar.classList.add('mobile-sidebar');
-                mainContent.classList.add('mobile-content');
-            } else {
-                sidebar.classList.remove('mobile-sidebar');
-                mainContent.classList.remove('mobile-content');
-            }
+    function App() {
+      const [requests, setRequests] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [activeTab, setActiveTab] = useState('all');
+      const [searchQuery, setSearchQuery] = useState('');
+
+      useEffect(() => {
+        fetch("/admin/api/requests", { credentials: 'include' })
+          .then(res => {
+            if (res.status === 401) window.location.href = "/admin/login";
+            return res.json();
+          })
+          .then(data => {
+            setRequests(data);
+            setLoading(false);
+          });
+      }, []);
+
+      const handleUpdate = async (id, status, reply, e) => {
+        e.preventDefault();
+        const form = new FormData();
+        form.append("request_id", id);
+        form.append("status", status);
+        form.append("reply", reply);
+
+        const res = await fetch("/admin/update", {
+          method: "POST",
+          body: form,
+          credentials: 'include'
+        });
+
+        const json = await res.json();
+        if (json.ok) {
+          setRequests(requests.map(r =>
+            r.id === id ? { ...r, status } : r
+          ));
+          e.target.reply.value = "";
+        } else {
+          alert("Ошибка: " + json.error);
         }
+      };
+
+      const filteredRequests = requests.filter(request => {
+        const matchesSearch = request.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            request.phone.includes(searchQuery) ||
+                            request.message.toLowerCase().includes(searchQuery.toLowerCase());
         
-        window.addEventListener('resize', handleResize);
-        handleResize();
-    </script>
+        if (activeTab === 'all') return matchesSearch;
+        return matchesSearch && request.status === activeTab;
+      });
+
+      const getStatusColor = (status) => {
+        switch(status) {
+          case 'new': return 'bg-blue-600';
+          case 'in_progress': return 'bg-yellow-600';
+          case 'done': return 'bg-green-600';
+          default: return 'bg-gray-600';
+        }
+      };
+
+      const getStatusIcon = (status) => {
+        switch(status) {
+          case 'new': return 'fa-bell';
+          case 'in_progress': return 'fa-gears';
+          case 'done': return 'fa-check';
+          default: return 'fa-circle';
+        }
+      };
+
+      if (loading) return (
+        <div className="flex items-center justify-center h-screen">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
+        </div>
+      );
+
+      return (
+        <div className="min-h-screen bg-dark-900">
+          {/* Sidebar */}
+          <div className="fixed inset-y-0 left-0 w-64 bg-dark-800 shadow-lg">
+            <div className="flex items-center justify-center h-16 px-4 bg-dark-900">
+              <h1 className="text-xl font-bold text-white">LegalBot Admin</h1>
+            </div>
+            <nav className="p-4">
+              <div className="mb-8">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Поиск..."
+                    className="w-full px-4 py-2 bg-dark-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-600"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <i className="fas fa-search absolute right-3 top-3 text-gray-400"></i>
+                </div>
+              </div>
+              
+              <ul>
+                <li className="mb-2">
+                  <button
+                    onClick={() => setActiveTab('all')}
+                    className={`w-full flex items-center px-4 py-2 rounded-lg ${activeTab === 'all' ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-dark-700'}`}
+                  >
+                    <i className="fas fa-list mr-3"></i>
+                    Все заявки
+                    <span className="ml-auto bg-gray-700 text-xs px-2 py-1 rounded-full">
+                      {requests.length}
+                    </span>
+                  </button>
+                </li>
+                <li className="mb-2">
+                  <button
+                    onClick={() => setActiveTab('new')}
+                    className={`w-full flex items-center px-4 py-2 rounded-lg ${activeTab === 'new' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-dark-700'}`}
+                  >
+                    <i className="fas fa-bell mr-3"></i>
+                    Новые
+                    <span className="ml-auto bg-gray-700 text-xs px-2 py-1 rounded-full">
+                      {requests.filter(r => r.status === 'new').length}
+                    </span>
+                  </button>
+                </li>
+                <li className="mb-2">
+                  <button
+                    onClick={() => setActiveTab('in_progress')}
+                    className={`w-full flex items-center px-4 py-2 rounded-lg ${activeTab === 'in_progress' ? 'bg-yellow-600 text-white' : 'text-gray-300 hover:bg-dark-700'}`}
+                  >
+                    <i className="fas fa-gears mr-3"></i>
+                    В работе
+                    <span className="ml-auto bg-gray-700 text-xs px-2 py-1 rounded-full">
+                      {requests.filter(r => r.status === 'in_progress').length}
+                    </span>
+                  </button>
+                </li>
+                <li className="mb-2">
+                  <button
+                    onClick={() => setActiveTab('done')}
+                    className={`w-full flex items-center px-4 py-2 rounded-lg ${activeTab === 'done' ? 'bg-green-600 text-white' : 'text-gray-300 hover:bg-dark-700'}`}
+                  >
+                    <i className="fas fa-check mr-3"></i>
+                    Завершенные
+                    <span className="ml-auto bg-gray-700 text-xs px-2 py-1 rounded-full">
+                      {requests.filter(r => r.status === 'done').length}
+                    </span>
+                  </button>
+                </li>
+              </ul>
+            </nav>
+            <div className="absolute bottom-0 w-full p-4">
+              <a 
+                href="/admin/logout" 
+                className="flex items-center justify-center px-4 py-2 bg-red-600 rounded-lg hover:bg-red-700 text-white"
+              >
+                <i className="fas fa-sign-out-alt mr-2"></i>
+                Выйти
+              </a>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="ml-64 p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-2xl font-bold">
+                {activeTab === 'all' && 'Все заявки'}
+                {activeTab === 'new' && 'Новые заявки'}
+                {activeTab === 'in_progress' && 'Заявки в работе'}
+                {activeTab === 'done' && 'Завершенные заявки'}
+              </h1>
+              <div className="text-gray-400">
+                {new Date().toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </div>
+            </div>
+
+            {filteredRequests.length === 0 ? (
+              <div className="bg-dark-800 rounded-lg p-8 text-center">
+                <i className="fas fa-inbox text-5xl text-gray-600 mb-4"></i>
+                <h3 className="text-xl text-gray-300 mb-2">Нет заявок</h3>
+                <p className="text-gray-500">Здесь будут отображаться заявки, соответствующие выбранному фильтру</p>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {filteredRequests.map(r => (
+                  <div 
+                    key={r.id} 
+                    className="bg-dark-800 p-5 rounded-lg shadow-lg transition-all hover:shadow-xl animate-fade-in"
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h2 className="text-xl font-semibold">
+                          <span className="text-primary-400">#{r.id}</span> {r.name}
+                        </h2>
+                        <div className="flex items-center mt-1 text-gray-400">
+                          <i className="fas fa-phone-alt mr-2"></i>
+                          <span>{r.phone}</span>
+                        </div>
+                      </div>
+                      <span className={`${getStatusColor(r.status)} px-3 py-1 rounded-full text-sm flex items-center`}>
+                        <i className={`fas ${getStatusIcon(r.status)} mr-2`}></i>
+                        {r.status === 'new' && 'Новая'}
+                        {r.status === 'in_progress' && 'В работе'}
+                        {r.status === 'done' && 'Завершено'}
+                      </span>
+                    </div>
+
+                    <div className="bg-dark-700 rounded-lg p-4 mb-3">
+                      <p className="text-gray-300">{r.message}</p>
+                    </div>
+
+                    <div className="flex justify-between items-center text-sm text-gray-500 mb-4">
+                      <div>
+                        <i className="far fa-clock mr-1"></i>
+                        {new Date(r.created_at).toLocaleString("ru-RU")}
+                      </div>
+                    </div>
+
+                    {r.documents.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="text-sm font-medium text-gray-400 mb-2">Документы:</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {r.documents.map((d, i) => (
+                            <a
+                              key={i}
+                              href={`/download/${d.file_id}`}
+                              className="inline-flex items-center px-3 py-1 bg-dark-700 rounded-full text-sm text-blue-400 hover:bg-dark-600 transition-colors"
+                              target="_blank"
+                              rel="noopener"
+                            >
+                              <i className="fas fa-file-alt mr-2"></i>
+                              {d.file_name}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <form
+                      className="mt-4 flex gap-3"
+                      onSubmit={e =>
+                        handleUpdate(
+                          r.id,
+                          e.target.status.value,
+                          e.target.reply.value,
+                          e
+                        )
+                      }
+                    >
+                      <div className="relative flex-1">
+                        <input 
+                          name="reply" 
+                          placeholder="Напишите ответ..." 
+                          className="w-full bg-dark-700 rounded-lg px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-primary-600" 
+                        />
+                        <button 
+                          type="submit"
+                          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-primary-400 hover:text-primary-300"
+                        >
+                          <i className="fas fa-paper-plane"></i>
+                        </button>
+                      </div>
+                      <select 
+                        name="status" 
+                        defaultValue={r.status} 
+                        className="bg-dark-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-600"
+                      >
+                        <option value="new">🆕 Новая</option>
+                        <option value="in_progress">🔧 В работе</option>
+                        <option value="done">✅ Завершено</option>
+                      </select>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
 </body>
 </html>
