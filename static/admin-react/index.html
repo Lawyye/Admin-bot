@@ -1,345 +1,382 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>LegalBot Admin</title>
-
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            primary: {
-              600: '#7c3aed',
-              700: '#6d28d9',
-            },
-            dark: {
-              800: '#1e293b',
-              900: '#0f172a',
-            }
-          },
-          animation: {
-            'fade-in': 'fadeIn 0.3s ease-in',
-            'slide-up': 'slideUp 0.3s ease-out'
-          },
-          keyframes: {
-            fadeIn: {
-              '0%': { opacity: '0' },
-              '100%': { opacity: '1' }
-            },
-            slideUp: {
-              '0%': { transform: 'translateY(10px)', opacity: '0' },
-              '100%': { transform: 'translateY(0)', opacity: '1' }
-            }
-          }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LegalBot Admin</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #7c3aed;
+            --primary-dark: #6d28d9;
+            --dark-900: #0f172a;
+            --dark-800: #1e293b;
+            --dark-700: #334155;
+            --gray-300: #cbd5e1;
+            --gray-500: #64748b;
         }
-      }
-    }
-  </script>
-
-  <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="style.css">
-
-  <!-- React + ReactDOM -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
-<style>
-  html, body, #root {
-    height: 100%;
-    margin: 0;
-  }
-</style>
-</head>
-<body class="bg-dark-900 text-gray-100 min-h-screen font-sans">
-
-  <div id="root"></div>
-
-  <script type="text/babel">
-    const { useState, useEffect } = React;
-
-    function App() {
-      const [requests, setRequests] = useState([]);
-      const [loading, setLoading] = useState(true);
-      const [activeTab, setActiveTab] = useState('all');
-      const [searchQuery, setSearchQuery] = useState('');
-
-      useEffect(() => {
-        fetch("/admin/api/requests", { credentials: 'include' })
-          .then(res => {
-            if (res.status === 401) window.location.href = "/admin/login";
-            return res.json();
-          })
-          .then(data => {
-            setRequests(data);
-            setLoading(false);
-          });
-      }, []);
-
-      const handleUpdate = async (id, status, reply, e) => {
-        e.preventDefault();
-        const form = new FormData();
-        form.append("request_id", id);
-        form.append("status", status);
-        form.append("reply", reply);
-
-        const res = await fetch("/admin/update", {
-          method: "POST",
-          body: form,
-          credentials: 'include'
-        });
-
-        const json = await res.json();
-        if (json.ok) {
-          setRequests(requests.map(r =>
-            r.id === id ? { ...r, status } : r
-          ));
-          e.target.reply.value = "";
-        } else {
-          alert("Ошибка: " + json.error);
-        }
-      };
-
-      const filteredRequests = requests.filter(request => {
-        const matchesSearch = request.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            request.phone.includes(searchQuery) ||
-                            request.message.toLowerCase().includes(searchQuery.toLowerCase());
         
-        if (activeTab === 'all') return matchesSearch;
-        return matchesSearch && request.status === activeTab;
-      });
-
-      const getStatusColor = (status) => {
-        switch(status) {
-          case 'new': return 'bg-blue-600';
-          case 'in_progress': return 'bg-yellow-600';
-          case 'done': return 'bg-green-600';
-          default: return 'bg-gray-600';
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-      };
-
-      const getStatusIcon = (status) => {
-        switch(status) {
-          case 'new': return 'fa-bell';
-          case 'in_progress': return 'fa-gears';
-          case 'done': return 'fa-check';
-          default: return 'fa-circle';
+        
+        body {
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--dark-900);
+            color: var(--gray-300);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
-      };
-
-      if (loading) return (
-        <div className="flex items-center justify-center h-screen">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
-        </div>
-      );
-
-      return (
-        <div className="min-h-screen bg-dark-900">
-          {/* Sidebar */}
-          <div className="fixed inset-y-0 left-0 w-64 bg-dark-800 shadow-lg">
-            <div className="flex items-center justify-center h-16 px-4 bg-dark-900">
-              <h1 className="text-xl font-bold text-white">LegalBot Admin</h1>
+        
+        /* Шапка */
+        .header {
+            background: var(--dark-800);
+            padding: 15px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            z-index: 10;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .logo-icon {
+            font-size: 1.8rem;
+            color: var(--primary);
+        }
+        
+        .logo-text {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: white;
+        }
+        
+        .user-section {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .date-display {
+            background: var(--dark-700);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+        
+        .logout-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .logout-btn:hover {
+            background: var(--primary-dark);
+        }
+        
+        /* Основной контент */
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        /* Сайдбар */
+        .sidebar {
+            width: 260px;
+            background: var(--dark-800);
+            padding: 25px 15px;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--dark-700);
+            transition: all 0.3s ease;
+        }
+        
+        .search-container {
+            position: relative;
+            margin-bottom: 25px;
+        }
+        
+        .search-container i {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray-500);
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 12px 20px 12px 40px;
+            background: var(--dark-700);
+            border: none;
+            border-radius: 8px;
+            color: var(--gray-300);
+            font-size: 1rem;
+        }
+        
+        .nav-menu {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .nav-item {
+            padding: 12px 15px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: var(--gray-300);
+            text-decoration: none;
+        }
+        
+        .nav-item:hover, .nav-item.active {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .nav-item i {
+            font-size: 1.2rem;
+            width: 24px;
+            text-align: center;
+        }
+        
+        .nav-count {
+            margin-left: auto;
+            background: var(--dark-700);
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
+        
+        .nav-item.active .nav-count,
+        .nav-item:hover .nav-count {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        
+        /* Контент */
+        .content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+        
+        .content-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: white;
+        }
+        
+        .requests-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 25px;
+        }
+        
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 50px 20px;
+            background: var(--dark-800);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .empty-icon {
+            font-size: 3.5rem;
+            color: var(--gray-500);
+            margin-bottom: 20px;
+        }
+        
+        .empty-title {
+            font-size: 1.5rem;
+            color: white;
+            margin-bottom: 10px;
+        }
+        
+        .empty-description {
+            color: var(--gray-500);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        
+        /* Адаптивность */
+        @media (max-width: 992px) {
+            .sidebar {
+                width: 220px;
+            }
+            
+            .requests-grid {
+                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                padding: 15px;
+                border-right: none;
+                border-bottom: 1px solid var(--dark-700);
+            }
+            
+            .nav-menu {
+                flex-direction: row;
+                overflow-x: auto;
+                padding-bottom: 10px;
+            }
+            
+            .nav-item {
+                flex-direction: column;
+                padding: 10px 15px;
+                min-width: 100px;
+                text-align: center;
+            }
+            
+            .nav-item span:not(.nav-count) {
+                font-size: 0.85rem;
+                margin-top: 5px;
+            }
+            
+            .nav-count {
+                margin-left: 0;
+                margin-top: 5px;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .header {
+                flex-direction: column;
+                gap: 15px;
+                padding: 15px;
+            }
+            
+            .user-section {
+                width: 100%;
+                justify-content: space-between;
+            }
+            
+            .requests-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .empty-state {
+                padding: 30px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Шапка -->
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">
+                <i class="fas fa-scale-balanced"></i>
             </div>
-            <nav className="p-4">
-              <div className="mb-8">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Поиск..."
-                    className="w-full px-4 py-2 bg-dark-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-600"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <i className="fas fa-search absolute right-3 top-3 text-gray-400"></i>
-                </div>
-              </div>
-              
-              <ul>
-                <li className="mb-2">
-                  <button
-                    onClick={() => setActiveTab('all')}
-                    className={`w-full flex items-center px-4 py-2 rounded-lg ${activeTab === 'all' ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-dark-700'}`}
-                  >
-                    <i className="fas fa-list mr-3"></i>
-                    Все заявки
-                    <span className="ml-auto bg-gray-700 text-xs px-2 py-1 rounded-full">
-                      {requests.length}
-                    </span>
-                  </button>
-                </li>
-                <li className="mb-2">
-                  <button
-                    onClick={() => setActiveTab('new')}
-                    className={`w-full flex items-center px-4 py-2 rounded-lg ${activeTab === 'new' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-dark-700'}`}
-                  >
-                    <i className="fas fa-bell mr-3"></i>
-                    Новые
-                    <span className="ml-auto bg-gray-700 text-xs px-2 py-1 rounded-full">
-                      {requests.filter(r => r.status === 'new').length}
-                    </span>
-                  </button>
-                </li>
-                <li className="mb-2">
-                  <button
-                    onClick={() => setActiveTab('in_progress')}
-                    className={`w-full flex items-center px-4 py-2 rounded-lg ${activeTab === 'in_progress' ? 'bg-yellow-600 text-white' : 'text-gray-300 hover:bg-dark-700'}`}
-                  >
-                    <i className="fas fa-gears mr-3"></i>
-                    В работе
-                    <span className="ml-auto bg-gray-700 text-xs px-2 py-1 rounded-full">
-                      {requests.filter(r => r.status === 'in_progress').length}
-                    </span>
-                  </button>
-                </li>
-                <li className="mb-2">
-                  <button
-                    onClick={() => setActiveTab('done')}
-                    className={`w-full flex items-center px-4 py-2 rounded-lg ${activeTab === 'done' ? 'bg-green-600 text-white' : 'text-gray-300 hover:bg-dark-700'}`}
-                  >
-                    <i className="fas fa-check mr-3"></i>
-                    Завершенные
-                    <span className="ml-auto bg-gray-700 text-xs px-2 py-1 rounded-full">
-                      {requests.filter(r => r.status === 'done').length}
-                    </span>
-                  </button>
-                </li>
-              </ul>
-            </nav>
-            <div className="absolute bottom-0 w-full p-4">
-              <a 
-                href="/admin/logout" 
-                className="flex items-center justify-center px-4 py-2 bg-red-600 rounded-lg hover:bg-red-700 text-white"
-              >
-                <i className="fas fa-sign-out-alt mr-2"></i>
+            <div class="logo-text">LegalBot Admin</div>
+        </div>
+        
+        <div class="user-section">
+            <div class="date-display">
+                <i class="far fa-calendar-alt"></i>
+                <span id="current-date"></span>
+            </div>
+            <button class="logout-btn">
+                <i class="fas fa-sign-out-alt"></i>
                 Выйти
-              </a>
-            </div>
-          </div>
-
-          {/* Main Content */}
-          <div className="ml-64 p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h1 className="text-2xl font-bold">
-                {activeTab === 'all' && 'Все заявки'}
-                {activeTab === 'new' && 'Новые заявки'}
-                {activeTab === 'in_progress' && 'Заявки в работе'}
-                {activeTab === 'done' && 'Завершенные заявки'}
-              </h1>
-              <div className="text-gray-400">
-                {new Date().toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-              </div>
-            </div>
-
-            {filteredRequests.length === 0 ? (
-              <div className="bg-dark-800 rounded-lg p-8 text-center">
-                <i className="fas fa-inbox text-5xl text-gray-600 mb-4"></i>
-                <h3 className="text-xl text-gray-300 mb-2">Нет заявок</h3>
-                <p className="text-gray-500">Здесь будут отображаться заявки, соответствующие выбранному фильтру</p>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {filteredRequests.map(r => (
-                  <div 
-                    key={r.id} 
-                    className="bg-dark-800 p-5 rounded-lg shadow-lg transition-all hover:shadow-xl animate-fade-in"
-                  >
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h2 className="text-xl font-semibold">
-                          <span className="text-primary-400">#{r.id}</span> {r.name}
-                        </h2>
-                        <div className="flex items-center mt-1 text-gray-400">
-                          <i className="fas fa-phone-alt mr-2"></i>
-                          <span>{r.phone}</span>
-                        </div>
-                      </div>
-                      <span className={`${getStatusColor(r.status)} px-3 py-1 rounded-full text-sm flex items-center`}>
-                        <i className={`fas ${getStatusIcon(r.status)} mr-2`}></i>
-                        {r.status === 'new' && 'Новая'}
-                        {r.status === 'in_progress' && 'В работе'}
-                        {r.status === 'done' && 'Завершено'}
-                      </span>
-                    </div>
-
-                    <div className="bg-dark-700 rounded-lg p-4 mb-3">
-                      <p className="text-gray-300">{r.message}</p>
-                    </div>
-
-                    <div className="flex justify-between items-center text-sm text-gray-500 mb-4">
-                      <div>
-                        <i className="far fa-clock mr-1"></i>
-                        {new Date(r.created_at).toLocaleString("ru-RU")}
-                      </div>
-                    </div>
-
-                    {r.documents.length > 0 && (
-                      <div className="mb-4">
-                        <h4 className="text-sm font-medium text-gray-400 mb-2">Документы:</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {r.documents.map((d, i) => (
-                            <a
-                              key={i}
-                              href={`/download/${d.file_id}`}
-                              className="inline-flex items-center px-3 py-1 bg-dark-700 rounded-full text-sm text-blue-400 hover:bg-dark-600 transition-colors"
-                              target="_blank"
-                              rel="noopener"
-                            >
-                              <i className="fas fa-file-alt mr-2"></i>
-                              {d.file_name}
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <form
-                      className="mt-4 flex gap-3"
-                      onSubmit={e =>
-                        handleUpdate(
-                          r.id,
-                          e.target.status.value,
-                          e.target.reply.value,
-                          e
-                        )
-                      }
-                    >
-                      <div className="relative flex-1">
-                        <input 
-                          name="reply" 
-                          placeholder="Напишите ответ..." 
-                          className="w-full bg-dark-700 rounded-lg px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-primary-600" 
-                        />
-                        <button 
-                          type="submit"
-                          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-primary-400 hover:text-primary-300"
-                        >
-                          <i className="fas fa-paper-plane"></i>
-                        </button>
-                      </div>
-                      <select 
-                        name="status" 
-                        defaultValue={r.status} 
-                        className="bg-dark-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-600"
-                      >
-                        <option value="new">🆕 Новая</option>
-                        <option value="in_progress">🔧 В работе</option>
-                        <option value="done">✅ Завершено</option>
-                      </select>
-                    </form>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+            </button>
         </div>
-      );
-    }
-
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-  </script>
+    </header>
+    
+    <div class="main-container">
+        <!-- Сайдбар -->
+        <aside class="sidebar">
+            <div class="search-container">
+                <i class="fas fa-search"></i>
+                <input type="text" class="search-input" placeholder="Поиск...">
+            </div>
+            
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active">
+                    <i class="fas fa-list"></i>
+                    <span>Все заявки</span>
+                    <span class="nav-count">0</span>
+                </a>
+                <a href="#" class="nav-item">
+                    <i class="fas fa-bell"></i>
+                    <span>Новые</span>
+                    <span class="nav-count">0</span>
+                </a>
+                <a href="#" class="nav-item">
+                    <i class="fas fa-gears"></i>
+                    <span>В работе</span>
+                    <span class="nav-count">0</span>
+                </a>
+                <a href="#" class="nav-item">
+                    <i class="fas fa-check"></i>
+                    <span>Завершенные</span>
+                    <span class="nav-count">0</span>
+                </a>
+            </nav>
+        </aside>
+        
+        <!-- Основной контент -->
+        <main class="content">
+            <div class="content-header">
+                <h2 class="section-title">Все заявки</h2>
+            </div>
+            
+            <div class="requests-grid">
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <i class="fas fa-inbox"></i>
+                    </div>
+                    <h3 class="empty-title">Нет заявок</h3>
+                    <p class="empty-description">
+                        Здесь будут отображаться заявки, соответствующие выбранному фильтру
+                    </p>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        // Установка текущей даты
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        document.getElementById('current-date').textContent = new Date().toLocaleDateString('ru-RU', options);
+    </script>
 </body>
 </html>
