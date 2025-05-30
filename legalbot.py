@@ -429,10 +429,33 @@ async def api_requests(request: Request):
             "documents": [dict(d) for d in docs]
         })
 # Обрезаем длинные сообщения
-for item in result:
-    if len(item['message']) > 300:
-        item['message'] = item['message'][:297] + "..."
-    return result
+@app.get("/admin/api/requests")
+async def api_requests(request: Request):
+    if not request.session.get("auth"):
+        raise HTTPException(status_code=401)
+
+    async with aiosqlite.connect("bot.db") as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM requests ORDER BY created_at DESC")
+        rows = await cursor.fetchall()
+
+    result = []
+    for r in rows:
+        async with aiosqlite.connect("bot.db") as db:
+            db.row_factory = aiosqlite.Row
+            docs_cursor = await db.execute("SELECT * FROM documents WHERE request_id = ?", (r["id"],))
+            docs = await docs_cursor.fetchall()
+        result.append({
+            **dict(r),
+            "documents": [dict(d) for d in docs]
+        })
+
+    # Обрезаем длинные сообщения
+    for item in result:
+        if len(item['message']) > 300:
+            item['message'] = item['message'][:297] + "..."
+
+    return result  # Возвращаем результат после всех обработок
 
 @app.post("/admin/update")
 async def update_request(
