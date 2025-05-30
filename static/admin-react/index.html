@@ -84,7 +84,6 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      text-decoration: none;
     }
     
     .logout-btn:hover {
@@ -464,10 +463,10 @@
         <i class="far fa-calendar-alt"></i>
         <span id="current-date"></span>
       </div>
-      <a href="/admin/logout" class="logout-btn">
+      <button class="logout-btn" id="logout-btn">
         <i class="fas fa-sign-out-alt"></i>
         Выйти
-      </a>
+      </button>
     </div>
   </header>
   
@@ -534,6 +533,53 @@
     const loadingOverlay = document.getElementById('loading-overlay');
     const searchInput = document.getElementById('search-input');
     const sectionTitle = document.getElementById('section-title');
+    const logoutBtn = document.getElementById('logout-btn');
+    
+    // Функция для обработки выхода
+    logoutBtn.addEventListener('click', () => {
+      window.location.href = "/admin/logout";
+    });
+    
+    // Функция для обработки ответов
+    async function handleFormSubmit(event, requestId) {
+      event.preventDefault();
+      
+      const form = event.target;
+      const status = form.querySelector('.status-select').value;
+      const reply = form.querySelector('.reply-input').value;
+      
+      try {
+        const formData = new FormData();
+        formData.append("request_id", requestId);
+        formData.append("status", status);
+        formData.append("reply", reply);
+        
+        const response = await fetch("/admin/update", {
+          method: "POST",
+          body: formData,
+          credentials: 'include'
+        });
+        
+        const result = await response.json();
+        
+        if (result.ok) {
+          // Обновляем локальные данные
+          const requestIndex = allRequests.findIndex(r => r.id == requestId);
+          if (requestIndex !== -1) {
+            allRequests[requestIndex].status = status;
+          }
+          
+          updateCounts();
+          renderRequests();
+          form.querySelector('.reply-input').value = '';
+        } else {
+          alert("Ошибка: " + (result.error || 'Неизвестная ошибка'));
+        }
+      } catch (error) {
+        console.error('Ошибка при обновлении заявки:', error);
+        alert('Произошла ошибка при обновлении заявки');
+      }
+    }
     
     // Загрузка заявок
     async function loadRequests() {
@@ -602,6 +648,26 @@
       sectionTitle.textContent = titles[currentTab] || 'Заявки';
     }
     
+    // Функция для преобразования статуса в текст
+    function getStatusText(status) {
+      const statusMap = {
+        'new': 'Новая',
+        'in_progress': 'В работе',
+        'done': 'Завершено'
+      };
+      return statusMap[status] || status;
+    }
+    
+    // Функция для преобразования статуса в класс CSS
+    function getStatusClass(status) {
+      const classMap = {
+        'new': 'status-new',
+        'in_progress': 'status-in-progress',
+        'done': 'status-done'
+      };
+      return classMap[status] || '';
+    }
+    
     // Отображение заявок
     function renderRequests() {
       const filteredRequests = filterRequests();
@@ -609,14 +675,12 @@
       
       if (filteredRequests.length === 0) {
         requestsContainer.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-icon">
-              <i class="fas fa-inbox"></i>
+          <div class="request-card">
+            <div class="request-body" style="text-align: center; padding: 40px 20px;">
+              <i class="fas fa-inbox" style="font-size: 3rem; color: var(--gray-500); margin-bottom: 15px;"></i>
+              <h3 style="font-size: 1.2rem; color: white; margin-bottom: 10px;">Нет заявок</h3>
+              <p style="color: var(--gray-500);">Здесь будут отображаться заявки, соответствующие выбранному фильтру</p>
             </div>
-            <h3 class="empty-title">Нет заявок</h3>
-            <p class="empty-description">
-              Здесь будут отображаться заявки, соответствующие выбранному фильтру
-            </p>
           </div>
         `;
         return;
@@ -641,7 +705,7 @@
             <div class="request-message">${request.message}</div>
           </div>
           
-          ${request.documents.length > 0 ? `
+          ${request.documents && request.documents.length > 0 ? `
             <div class="documents-container">
               <div class="documents-title">Документы:</div>
               ${request.documents.map(doc => `
@@ -662,7 +726,7 @@
             </div>
           </div>
           
-          <form class="action-form" onsubmit="return updateRequest(event, ${request.id})">
+          <form class="action-form" onsubmit="event.preventDefault(); handleFormSubmit(event, ${request.id})">
             <input type="text" 
                    name="reply" 
                    class="reply-input" 
@@ -678,64 +742,6 @@
           </form>
         </div>
       `).join('');
-    }
-    
-    // Вспомогательные функции для статусов
-    function getStatusClass(status) {
-      return {
-        'new': 'status-new',
-        'in_progress': 'status-in-progress',
-        'done': 'status-done'
-      }[status] || '';
-    }
-    
-    function getStatusText(status) {
-      return {
-        'new': 'Новая',
-        'in_progress': 'В работе',
-        'done': 'Завершено'
-      }[status] || status;
-    }
-    
-    // Обновление заявки
-    async function updateRequest(event, id) {
-      event.preventDefault();
-      
-      const form = event.target;
-      const status = form.status.value;
-      const reply = form.reply.value;
-      
-      try {
-        const formData = new FormData();
-        formData.append("request_id", id);
-        formData.append("status", status);
-        formData.append("reply", reply);
-        
-        const response = await fetch("/admin/update", {
-          method: "POST",
-          body: formData,
-          credentials: 'include'
-        });
-        
-        const result = await response.json();
-        
-        if (result.ok) {
-          // Обновляем локальные данные
-          const requestIndex = allRequests.findIndex(r => r.id === id);
-          if (requestIndex !== -1) {
-            allRequests[requestIndex].status = status;
-          }
-          
-          updateCounts();
-          renderRequests();
-          form.reply.value = '';
-        } else {
-          alert("Ошибка: " + (result.error || 'Неизвестная ошибка'));
-        }
-      } catch (error) {
-        console.error('Ошибка при обновлении заявки:', error);
-        alert('Произошла ошибка при обновлении заявки');
-      }
     }
     
     // Инициализация
