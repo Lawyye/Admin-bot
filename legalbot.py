@@ -434,26 +434,6 @@ async def admin_auth(
         status_code=401
     )
 
-@app.get("/admin/api/requests")
-async def api_requests(request: Request):
-    if not request.session.get("auth"):
-        raise HTTPException(status_code=401)
-
-    async with aiosqlite.connect("bot.db") as db:
-        db.row_factory = aiosqlite.Row
-        cursor = await db.execute("SELECT * FROM requests ORDER BY created_at DESC")
-        rows = await cursor.fetchall()
-
-    result = []
-    for r in rows:
-        async with aiosqlite.connect("bot.db") as db:
-            db.row_factory = aiosqlite.Row
-            docs_cursor = await db.execute("SELECT * FROM documents WHERE request_id = ?", (r["id"],))
-            docs = await docs_cursor.fetchall()
-        result.append({
-            **dict(r),
-            "documents": [dict(d) for d in docs]
-        })
 # Обрезаем длинные сообщения
 @app.get("/admin/api/requests")
 async def api_requests(request: Request):
@@ -462,7 +442,18 @@ async def api_requests(request: Request):
 
     async with aiosqlite.connect("bot.db") as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute("SELECT * FROM requests ORDER BY created_at DESC")
+        cursor = await db.execute("""
+    SELECT 
+        id, 
+        user_id, 
+        name, 
+        phone, 
+        message, 
+        created_at, 
+        status 
+    FROM requests 
+    ORDER BY created_at DESC
+""")
         rows = await cursor.fetchall()
 
     result = []
