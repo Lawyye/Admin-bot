@@ -520,6 +520,59 @@
         grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
       }
     }
+    /* ===== Исправления для карточек ===== */
+.request-card {
+    overflow: hidden;
+}
+
+.status-badge {
+    max-width: 100px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.action-form {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.reply-input {
+    min-width: 100% !important;
+    flex: 1 0 100%;
+}
+
+.action-group {
+    display: flex;
+    flex: 1;
+    gap: 8px;
+    min-width: min(100%, 200px);
+}
+
+.status-select {
+    flex: 1;
+    min-width: 120px;
+}
+
+.submit-btn {
+    flex: 0 0 auto;
+}
+
+@media (max-width: 768px) {
+    .status-badge {
+        max-width: 80px;
+        font-size: 0.7rem;
+        padding: 3px 8px;
+    }
+    
+    .action-form > * {
+        flex: 1 1 100%;
+    }
+    
+    .request-meta {
+        font-size: 0.8rem;
+    }
+}
   </style>
 </head>
 <body>
