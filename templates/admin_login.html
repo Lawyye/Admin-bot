@@ -1,58 +1,172 @@
-<!DOCTYPE html>
-<html lang="ru">
+<!DOCTYPE html><html lang="ru">
 <head>
-    <!-- Тот же head что и в предыдущем примере -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход в LegalBot Admin</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-600: #7c3aed;
+            --primary-700: #6d28d9;
+            --dark-800: #1e293b;
+            --dark-900: #0f172a;
+            --dark-700: #334155;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+        }
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background: var(--dark-900);
+            color: var(--gray-300);
+            font-family: "Segoe UI", Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        .login-container {
+            background: var(--dark-800);
+            border-radius: 1rem;
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            animation: fadeIn 0.5s ease-out;
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .login-header h2 {
+            color: white;
+            font-size: 1.75rem;
+            margin-bottom: 0.5rem;
+        }
+        .login-header .logo {
+            font-size: 2.5rem;
+            color: var(--primary-600);
+            margin-bottom: 1rem;
+        }
+        .login-form .form-group {
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+        .login-form .form-group i {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray-500);
+        }
+        .login-form input {
+            width: 100%;
+            padding: 0.75rem 1rem 0.75rem 2.5rem;
+            background: var(--dark-700);
+            border: 2px solid var(--dark-700);
+            border-radius: 0.5rem;
+            color: var(--gray-300);
+            font-size: 1rem;
+            transition: all 0.2s ease;
+        }
+        .login-form input:focus {
+            outline: none;
+            border-color: var(--primary-600);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2);
+        }
+        .login-form input::placeholder {
+            color: var(--gray-500);
+        }
+        .login-form button {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--primary-600);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .login-form button:hover {
+            background: var(--primary-700);
+        }
+        .error {
+            margin-top: 1.5rem;
+            padding: 0.75rem 1rem;
+            background: rgba(220, 38, 38, 0.1);
+            border-left: 4px solid #dc2626;
+            color: #fca5a5;
+            border-radius: 0 0.25rem 0.25rem 0;
+            animation: slideUp 0.3s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .footer-links {
+            margin-top: 2rem;
+            text-align: center;
+            font-size: 0.875rem;
+            color: var(--gray-500);
+        }
+        .footer-links a {
+            color: var(--primary-600);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+        .footer-links a:hover {
+            color: var(--primary-700);
+            text-decoration: underline;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 dark:bg-dark-900">
-    <div class="min-h-screen flex items-center justify-center p-4">
-        <div class="w-full max-w-md bg-white dark:bg-dark-800 rounded-xl shadow-lg overflow-hidden">
-            <div class="p-6">
-                <div class="text-center mb-6">
-                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-primary-100 dark:bg-dark-700">
-                        <i class="fas fa-scale-balanced text-primary-600 dark:text-primary-500"></i>
-                    </div>
-                    <h2 class="mt-3 text-xl font-bold text-gray-900 dark:text-white">Вход в LegalBot</h2>
-                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Административная панель</p>
-                </div>
-
-                <form class="space-y-4">
-                    <div>
-                        <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Логин</label>
-                        <div class="relative">
-                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <i class="fas fa-user text-gray-400"></i>
-                            </div>
-                            <input id="username" name="username" type="text" required 
-                                class="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 dark:bg-dark-700 dark:text-white"
-                                placeholder="Ваш логин">
-                        </div>
-                    </div>
-
-                    <div>
-                        <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Пароль</label>
-                        <div class="relative">
-                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <i class="fas fa-lock text-gray-400"></i>
-                            </div>
-                            <input id="password" name="password" type="password" required 
-                                class="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 dark:bg-dark-700 dark:text-white"
-                                placeholder="Ваш пароль">
-                        </div>
-                    </div>
-
-                    <div>
-                        <button type="submit" 
-                            class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors">
-                            <i class="fas fa-sign-in-alt mr-2"></i>
-                            Войти
-                        </button>
-                    </div>
-                </form>
-
-                <div class="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
-                    Нет доступа? <a href="#" class="font-medium text-primary-600 dark:text-primary-500 hover:text-primary-500">Свяжитесь с администратором</a>
-                </div>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <div class="logo">
+                <i class="fas fa-scale-balanced"></i>
             </div>
+            <h2>Вход в LegalBot</h2>
+            <p>Административная панель</p>
+        </div>
+        <form method="post" action="/admin/login" class="login-form">
+            <div class="form-group">
+                <i class="fas fa-user"></i>
+                <input type="text" name="username" placeholder="Логин" required>
+            </div>
+            <div class="form-group">
+                <i class="fas fa-lock"></i>
+                <input type="password" name="password" placeholder="Пароль" required>
+            </div>
+            <button type="submit">
+                <i class="fas fa-sign-in-alt"></i>
+                Войти
+            </button>
+            {% if error %}
+            <div class="error">
+                <i class="fas fa-exclamation-circle"></i> {{ error }}
+            </div>
+            {% endif %}
+        </form>
+        <div class="footer-links">
+            <p>Нет доступа? <a href="#">Свяжитесь с администратором</a></p>
         </div>
     </div>
 </body>
