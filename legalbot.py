@@ -28,7 +28,11 @@ from io import BytesIO
 import uvicorn
 
 # ===== НАСТРОЙКА ЛОГИРОВАНИЯ =====
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 logger = logging.getLogger(__name__)
 load_dotenv()
 
@@ -67,44 +71,51 @@ dp.include_router(router)
 
 # ===== БАЗА ДАННЫХ =====
 async def init_db():
-    async with aiosqlite.connect('bot.db') as db:
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,  # Добавьте это поле
-                name TEXT,
-                phone TEXT,
-                message TEXT,
-                created_at TEXT,
-                status TEXT DEFAULT 'new'
-            )
-        """)
-        
-        # Проверяем и добавляем колонку, если её нет
-        cursor = await db.execute("PRAGMA table_info(requests)")
-        columns = await cursor.fetchall()
-        column_names = [col[1] for col in columns]
-        
-        if 'user_id' not in column_names:
-            await db.execute("ALTER TABLE requests ADD COLUMN user_id INTEGER")
-            logger.info("Added user_id column to requests table")
-        
-        # ... остальной код создания таблиц ...
-        
-        await db.commit()
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS documents (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                request_id INTEGER,
-                file_id TEXT,
-                file_name TEXT,
-                file_type TEXT,
-                file_size INTEGER,
-                sent_at TEXT,
-                FOREIGN KEY (request_id) REFERENCES requests(id)
-            )
-        """ )
-        await db.commit()
+    logger.info("Инициализация базы данных...")
+    try:
+        async with aiosqlite.connect('bot.db') as db:
+            # Создаем таблицу requests
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    name TEXT,
+                    phone TEXT,
+                    message TEXT,
+                    created_at TEXT,
+                    status TEXT DEFAULT 'new'
+                )
+            """)
+            
+            # Проверяем существование колонки user_id
+            cursor = await db.execute("PRAGMA table_info(requests)")
+            columns = await cursor.fetchall()
+            column_names = [col[1] for col in columns]
+            
+            if 'user_id' not in column_names:
+                logger.info("Добавляем колонку user_id в таблицу requests")
+                await db.execute("ALTER TABLE requests ADD COLUMN user_id INTEGER")
+                logger.info("Колонка user_id успешно добавлена")
+            
+            # Создаем таблицу documents
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS documents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    request_id INTEGER,
+                    file_id TEXT,
+                    file_name TEXT,
+                    file_type TEXT,
+                    file_size INTEGER,
+                    sent_at TEXT,
+                    FOREIGN KEY (request_id) REFERENCES requests(id) ON DELETE CASCADE
+                )
+            """)
+            
+            await db.commit()
+            logger.info("База данных успешно инициализирована")
+    except Exception as e:
+        logger.error(f"Ошибка при инициализации базы данных: {str(e)}")
+        raise
 
 # ===== ПЕРЕВОДЫ =====
 translations = {
@@ -331,9 +342,9 @@ async def finish_handler(message: types.Message, state: FSMContext):
 async def lifespan(app: FastAPI):
     try:
         await init_db()
-        # webhook setup ...
+        logger.info("Приложение запущено")
         yield
-        # shutdown webhook
+        logger.info("Приложение завершает работу")
     except Exception as e:
         logger.error(f"Lifespan error: {e}")
         raise
@@ -419,7 +430,6 @@ async def api_requests(request: Request):
         })
 
     return result
-    # … код для чтения из bot.db и возвращения JSON …
 
 @app.post("/admin/update")
 async def update_request(
@@ -461,7 +471,10 @@ async def update_request(
                     logger.info(f"Сообщение отправлено пользователю {user_id}: {reply}")
                 except Exception as e:
                     logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
-                    # Можно сохранить ошибку в базу или отправить администратору
+                    return JSONResponse(
+                        {"ok": False, "error": f"Ошибка отправки сообщения: {str(e)}"},
+                        status_code=500
+                    )
         
         return JSONResponse({"ok": True})
     
@@ -472,8 +485,6 @@ async def update_request(
             status_code=500
         )
         
-            
-    
 @app.post("/webhook")
 async def webhook_handler(request: Request):
     try:
@@ -538,6 +549,7 @@ async def health_check():
                 "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             }
         )
+
 @app.get("/download/{file_id}")
 async def download_file(file_id: str):
     try:
@@ -560,11 +572,8 @@ async def download_file(file_id: str):
     except Exception as e:
         logger.error(f"Ошибка при скачивании файла: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-        
-        
 
 if __name__ == "__main__":
-    asyncio.run(init_db())
     uvicorn.run(
         "legalbot:app",
         host="0.0.0.0",
