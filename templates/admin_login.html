@@ -1,168 +1,213 @@
-<!DOCTYPE html><html lang="ru">
+<!DOCTYPE html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход в LegalBot Admin</title>
-    <link rel="stylesheet" href="/static/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root {
-            --primary-600: #7c3aed;
-            --primary-700: #6d28d9;
-            --dark-800: #1e293b;
-            --dark-900: #0f172a;
-            --dark-700: #334155;
-            --gray-300: #d1d5db;
-            --gray-400: #9ca3af;
-            --gray-500: #6b7280;
-        }
-        html, body {
+        * {
             margin: 0;
             padding: 0;
-            height: 100%;
+            box-sizing: border-box;
         }
+        
         body {
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e1b2f 0%, #0f172a 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            background: var(--dark-900);
-            color: var(--gray-300);
-            font-family: "Segoe UI", Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
-            padding: 1rem;
+            padding: 20px;
         }
+        
         .login-container {
-            background: var(--dark-800);
-            border-radius: 1rem;
-            padding: 2.5rem;
+            background: rgba(30, 41, 59, 0.95);
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
             width: 100%;
-            max-width: 400px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-            animation: fadeIn 0.5s ease-out;
-        }
-        .login-header {
+            max-width: 450px;
+            padding: 40px 30px;
             text-align: center;
-            margin-bottom: 2rem;
+            position: relative;
+            overflow: hidden;
         }
-        .login-header h2 {
+        
+        .login-container::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(124, 58, 237, 0.1) 0%, transparent 70%);
+            z-index: -1;
+        }
+        
+        .logo {
+            margin-bottom: 25px;
+        }
+        
+        .logo-icon {
+            font-size: 3.5rem;
+            color: #7c3aed;
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 5px;
             color: white;
-            font-size: 1.75rem;
-            margin-bottom: 0.5rem;
         }
-        .login-header .logo {
-            font-size: 2.5rem;
-            color: var(--primary-600);
-            margin-bottom: 1rem;
+        
+        .subtitle {
+            color: #94a3b8;
+            font-size: 1rem;
+            margin-bottom: 30px;
         }
-        .login-form .form-group {
-            margin-bottom: 1.5rem;
+        
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .input-group {
             position: relative;
         }
-        .login-form .form-group i {
+        
+        .input-group i {
             position: absolute;
-            left: 1rem;
+            left: 15px;
             top: 50%;
             transform: translateY(-50%);
-            color: var(--gray-500);
+            color: #94a3b8;
+            font-size: 1.1rem;
         }
-        .login-form input {
+        
+        input {
             width: 100%;
-            padding: 0.75rem 1rem 0.75rem 2.5rem;
-            background: var(--dark-700);
-            border: 2px solid var(--dark-700);
-            border-radius: 0.5rem;
-            color: var(--gray-300);
+            padding: 14px 20px 14px 45px;
+            background: rgba(15, 23, 42, 0.7);
+            border: 2px solid #334155;
+            border-radius: 10px;
+            color: #e2e8f0;
             font-size: 1rem;
-            transition: all 0.2s ease;
+            transition: all 0.3s ease;
         }
-        .login-form input:focus {
+        
+        input:focus {
             outline: none;
-            border-color: var(--primary-600);
-            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2);
+            border-color: #7c3aed;
+            box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.3);
         }
-        .login-form input::placeholder {
-            color: var(--gray-500);
-        }
-        .login-form button {
-            width: 100%;
-            padding: 0.75rem;
-            background: var(--primary-600);
+        
+        button {
+            background: #7c3aed;
             color: white;
             border: none;
-            border-radius: 0.5rem;
-            font-size: 1rem;
-            font-weight: 500;
+            padding: 14px 20px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.3s ease;
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 0.5rem;
+            gap: 10px;
         }
-        .login-form button:hover {
-            background: var(--primary-700);
+        
+        button:hover {
+            background: #6d28d9;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(109, 40, 217, 0.4);
         }
-        .error {
-            margin-top: 1.5rem;
-            padding: 0.75rem 1rem;
-            background: rgba(220, 38, 38, 0.1);
-            border-left: 4px solid #dc2626;
-            color: #fca5a5;
-            border-radius: 0 0.25rem 0.25rem 0;
-            animation: slideUp 0.3s ease-out;
+        
+        button i {
+            font-size: 1.2rem;
         }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        
         .footer-links {
-            margin-top: 2rem;
-            text-align: center;
-            font-size: 0.875rem;
-            color: var(--gray-500);
+            margin-top: 25px;
+            font-size: 0.9rem;
+            color: #94a3b8;
         }
+        
         .footer-links a {
-            color: var(--primary-600);
+            color: #7c3aed;
             text-decoration: none;
-            transition: color 0.2s ease;
+            transition: color 0.2s;
         }
+        
         .footer-links a:hover {
-            color: var(--primary-700);
+            color: #a78bfa;
             text-decoration: underline;
+        }
+        
+        .error {
+            margin-top: 15px;
+            padding: 12px;
+            background: rgba(220, 38, 38, 0.15);
+            border-left: 4px solid #dc2626;
+            border-radius: 0 6px 6px 0;
+            text-align: left;
+            color: #fca5a5;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 30px 20px;
+            }
+            
+            h1 {
+                font-size: 1.6rem;
+            }
+            
+            input, button {
+                padding: 12px 15px 12px 45px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="login-container">
-        <div class="login-header">
-            <div class="logo">
+        <div class="logo">
+            <div class="logo-icon">
                 <i class="fas fa-scale-balanced"></i>
             </div>
-            <h2>Вход в LegalBot</h2>
-            <p>Административная панель</p>
+            <h1>Вход в LegalBot</h1>
+            <p class="subtitle">Административная панель</p>
         </div>
+        
         <form method="post" action="/admin/login" class="login-form">
-            <div class="form-group">
+            <div class="input-group">
                 <i class="fas fa-user"></i>
                 <input type="text" name="username" placeholder="Логин" required>
             </div>
-            <div class="form-group">
+            
+            <div class="input-group">
                 <i class="fas fa-lock"></i>
                 <input type="password" name="password" placeholder="Пароль" required>
             </div>
+            
             <button type="submit">
                 <i class="fas fa-sign-in-alt"></i>
                 Войти
             </button>
+            
             {% if error %}
             <div class="error">
                 <i class="fas fa-exclamation-circle"></i> {{ error }}
             </div>
             {% endif %}
         </form>
+        
         <div class="footer-links">
             <p>Нет доступа? <a href="#">Свяжитесь с администратором</a></p>
         </div>
