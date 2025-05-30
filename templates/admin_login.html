@@ -4,7 +4,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход в LegalBot Admin</title>
     <link rel="stylesheet" href="/static/style.css">
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -17,25 +16,18 @@
             --gray-400: #9ca3af;
             --gray-500: #6b7280;
         }
-        html, body.login {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  background: var(--dark-900);
-  color: var(--gray-300);
-  font-family: "Segoe UI", Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
-  padding: 1rem;
-  margin: 0;
-}
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
         body {
-            background: var(--dark-900);
-            color: var(--gray-300);
-            font-family: "Segoe UI", Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
+            background: var(--dark-900);
+            color: var(--gray-300);
+            font-family: "Segoe UI", Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
             padding: 1rem;
         }
         .login-container {
@@ -143,7 +135,7 @@
         }
     </style>
 </head>
-<body class="login">
+<body>
     <div class="login-container">
         <div class="login-header">
             <div class="logo">
@@ -175,19 +167,5 @@
             <p>Нет доступа? <a href="#">Свяжитесь с администратором</a></p>
         </div>
     </div>
-<style>
-  body {
-    all: unset;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    background: var(--dark-900);
-    color: var(--gray-300);
-    font-family: "Segoe UI", Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
-    padding: 1rem;
-    margin: 0;
-  }
-</style>
 </body>
 </html>
