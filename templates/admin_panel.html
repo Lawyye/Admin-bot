@@ -737,29 +737,30 @@
     
     // Загрузка заявок
     async function loadRequests() {
-      try {
+    try {
         loadingOverlay.style.display = 'flex';
-        
         const response = await fetch("/admin/api/requests", {
-          credentials: 'include'
+            credentials: 'include'
         });
         
-        if (response.status === 401) {
-          window.location.href = "/admin/login";
-          return;
+        // Проверка статуса ответа
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
         }
         
         const data = await response.json();
         allRequests = data;
         updateCounts();
         renderRequests();
-      } catch (error) {
+    } catch (error) {
         console.error('Ошибка при загрузке заявок:', error);
-        showNotification('Произошла ошибка при загрузке заявок', "error");
-      } finally {
+        showNotification(`Ошибка: ${error.message}`, "error");
+    } finally {
         loadingOverlay.style.display = 'none';
-      }
     }
+}
+    
     
     // Обновление счетчиков
     function updateCounts() {
