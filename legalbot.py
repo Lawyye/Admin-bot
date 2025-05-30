@@ -73,6 +73,10 @@ dp.include_router(router)
 async def init_db():
     logger.info("Инициализация базы данных...")
     try:
+        # Проверяем доступность файла базы данных
+        if not os.path.exists('bot.db'):
+            logger.warning("Database file not found, creating new one")
+
         async with aiosqlite.connect('bot.db') as db:
             # Создаем таблицу requests
             await db.execute("""
@@ -110,6 +114,11 @@ async def init_db():
                     FOREIGN KEY (request_id) REFERENCES requests(id) ON DELETE CASCADE
                 )
             """)
+            
+            # Проверяем существующие таблицы
+            cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = await cursor.fetchall()
+            logger.info(f"Existing tables: {[t['name'] for t in tables]}")
             
             await db.commit()
             logger.info("База данных успешно инициализирована")
@@ -445,17 +454,19 @@ async def api_requests(request: Request):
             db.row_factory = aiosqlite.Row
             docs_cursor = await db.execute("SELECT * FROM documents WHERE request_id = ?", (r["id"],))
             docs = await docs_cursor.fetchall()
+        
+        # Добавляем проверку наличия поля message
+        message = r.get('message', '')
+        if len(message) > 300:
+            message = message[:297] + "..."
+        
         result.append({
             **dict(r),
+            "message": message,  # Используем обрезанное сообщение
             "documents": [dict(d) for d in docs]
         })
 
-    # Обрезаем длинные сообщения
-    for item in result:
-        if len(item['message']) > 300:
-            item['message'] = item['message'][:297] + "..."
-
-    return result  # Возвращаем результат после всех обработок
+    return result
 
 @app.post("/admin/update")
 async def update_request(
